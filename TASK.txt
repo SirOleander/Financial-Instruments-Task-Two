@@ -20,43 +20,84 @@ Tasks:
 		- Gross Margin Strength = standard deviation of Gross Margin over last 3–5 years
 		- Operating Margin = Operating Income / Revenue
 		- Free Cash Flow = Operating Cash Flow - Capital Expenditure
-
+		- Free Cash Flow Margin = Free Cash Flow / Revenue
+		- FCF Yield = Free Cash Flow / Market Capitalization
+		- R&D Intensity = R&D Expense / Revenue
+		- R&D Efficiency = Revenue Growth / R&D Intensity
+		- Asset Turnover = Revenue / Average Total Assets
+		- Inventory Turnover = Cost of Goods Sold / Average Inventory
+		- Revenue Growth Volatility = standard deviation of revenue growth over last 3–5 years
+		- ARPU Growth = (ARPU_t - ARPU_t-1) / ARPU_t-1
+		- ARPU = Revenue / Average Users
+		- ROE = Net Income / ((Equity_t + Equity_t-1) / 2)
+		- Net Interest Margin = Net Interest Income / Average Earning Assets
+		- Efficiency Ratio = Noninterest Expense / Revenue
+		- Non-performing Loan Ratio = Non-performing Loans / Total Loans
+		- Capital Strenght = CET1 Ratio or Tier 1 Capital Ratio or Leverage Ratio
+		- Transaction Growth = (Transaction Volume_t - Transaction Volume_t-1) / Transaction Volume_t-1
+		- AUM Growth = (AUM_t - AUM_t-1) / AUM_t-1
+		- Premium Growth = (Net Premiums Written_t - Net Premiums Written_t-1) / Net Premiums Written_t-1
+		- Fee Revenue Growth = (Fee Revenue_t - Fee Revenue_t-1) / Fee Revenue_t-1
+		- Backlog Growth = (Backlog_t - Backlog_t-1) / Backlog_t-1
+		- Order Growth = (Orders_t - Orders_t-1) / Orders_t-1
+		- Book-to-Bill Ratio = Orders / Revenue
+		- Debt Strenght = Net Debt / EBITDA
+		- Capex Discipline = Free Cash Flow / Operating Cash Flow
+	- Quant Operatives:
+		- pricing power
+		- customer engagement
+		- customer loyalty
+		- market share leadership
+		- backlog / order growth
+		- revenue stability
+		- demand stability
+		- capital discipline
+		- R&D strength
+	- Evidence Operatives:
+		- brand strength
+		- regulatory trust
+		- technological leadership
+		- platform strength
+		- asset quality
+		- risk management quality
+		- contract quality
+		- patent protection
 	- Sectors:
 		- Banks
  			- Financials
-    				- Capital Strength
-    				- Credit Quality
-    				- Efficiency Ratio
-    				- Net Interest Margin
-    				- ROE
+    			- Capital Strength
+    			- Credit Quality
+    			- Efficiency Ratio
+    			- Net Interest Margin
+    			- ROE
  			- Operative
-    				- Customer franchise strength
-    				- Deposit / funding advantage
-    				- Regulatory trust
-    				- Risk management quality
-    				- Scale and market position
+    			- Customer franchise strength
+    			- Deposit / funding advantage
+    			- Regulatory trust
+    			- Risk management quality
+    			- Scale and market position
 		- Communication
   			- Financials
-    				- Free cash flow margin
-    				- Operating margin
-    				- Revenue growth
-    				- ROIC
-    				- User monetization / ARPU growth
+    			- Free cash flow margin 
+    			- Operating margin
+    			- Revenue growth
+    			- ROIC
+    			- User monetization / ARPU growth
   			- Operative
-    				- Advertising / subscription power
-    				- Content or data advantage
-    				- Customer engagement
-    				- Network effects
-    				- Platform strength
+    			- Advertising / subscription power
+    			- Content or data advantage
+    			- Customer engagement
+    			- Network effects
+    			- Platform strength
 		- Consumer Discretionary
   			- Financials
-    				- Free cash flow margin
-    				- Gross margin
-    				- Inventory / asset efficiency
-    				- Operating margin
-    				- Revenue growth
+    			- Free cash flow margin
+    			- Gross margin
+    			- Inventory / asset efficiency
+    			- Operating margin
+    			- Revenue growth
   		- Operative
-    			- Brand strength
+    		- Brand strength
     			- Customer loyalty
     			- Digital or logistics advantage
     			- Pricing power
@@ -140,3 +181,67 @@ Tasks:
     			- Market share leadership
     			- Product differentiation
     			- Technological leadership
+
+3. Create Signal Change Features
+	- For each signal, calculate how it changed compared with the previous report.
+	- pricing_power_change = current pricing_power - previous pricing_power
+
+4. Calculate Future Performance
+	- For each stock after each report release date, calculate performance over the next 63 trading days.
+	- 63-day return
+	- 63-day volatility
+	- 63-day Sharpe Ratio
+
+5. Build the Final Modelling Dataset
+	- Combine everything into one dataset:
+		- ticker
+		- report_date
+		- signal scores
+		- signal changes
+		- future_63d_return
+		- future_63d_volatility
+		- future_63d_sharpe
+
+6. Split the Data by Time
+	- Use a time-based split. Do not use a random train-test split.
+		- train = early reports
+		- validation = middle reports
+		- test = latest reports
+
+7. Train Simple Models
+	- Recommended models:
+		- Linear / Logistic Regression
+		- Random Forest
+		- XGBoost
+		- Support Vector Machine
+	- The model should learn the relationship between: report signals → future 63-day Sharpe Ratio
+
+8. Evaluate the Models
+	- Evaluate the models before using them for stock selection:
+		- Accuracy
+		- AUC
+		- Confusion Matrix
+		- Feature Importance
+		- Bias / Variance discussion
+
+9. Build the Ensemble Model
+	- Combine the individual model predictions into one final score.
+	- ensemble_score = average of model predictions
+
+10. Rank the 98 Stocks
+	- Use the ensemble score to rank all stocks.
+	- Top 10 stocks = buy portfolio
+	- Bottom 10 stocks = short portfolio
+
+11. Backtest the Strategy
+	- Test whether the rankings worked historically.
+		- Create:
+			- equally weighted long portfolio of top 10 stocks
+			- equally weighted short portfolio of bottom 10 stocks
+			- optional long-short portfolio
+		- Backtest assumptions to state:
+			- holding period = 63 trading days
+			- rebalancing rule
+			- transaction costs
+			- equal weighting
+			- report release date timing
