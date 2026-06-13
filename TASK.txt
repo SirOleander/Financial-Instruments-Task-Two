@@ -185,12 +185,43 @@ Tasks:
 3. Create Signal Change Features
 	- For each signal, calculate how it changed compared with the previous report.
 	- pricing_power_change = current pricing_power - previous pricing_power
+	- Create changes for the following features:
+		- Financials:
+			- competitive_advantage_score_change
+			- financial_score_change
+			- strategic_score_change
+			- ROIC_change
+			- revenue_growth_change
+			- operating_margin_change
+			- free_cash_flow_margin_change
+			- gross_margin_change
+			- debt_strength_change
+	
+		- Sectors:
+			- ARPU_growth_change
+			- R&D_efficiency_change
+			- credit_quality_change
+			- capital_strength_change
+			- backlog_growth_change
+			- capex_discipline_change
+
+		- Operatives:
+			- pricing_power_change
+			- innovation_strength_change
+			- customer_stickiness_change
+			- market_position_change
+			- capital_discipline_change
 
 4. Calculate Future Performance
+	- Check available annual and quarterly reports for the 98 companies
+	- Choose a common report period
+	- Keep companies with enough report observations
+	- Download stock prices covering that report period plus 63 trading days after the last report
+	- Use older stock prices only for charts / context, not for model targets
 	- For each stock after each report release date, calculate performance over the next 63 trading days.
-	- 63-day return
-	- 63-day volatility
-	- 63-day Sharpe Ratio
+		- 63-day return
+		- 63-day volatility
+		- 63-day Sharpe Ratio
 
 5. Build the Final Modelling Dataset
 	- Combine everything into one dataset:
