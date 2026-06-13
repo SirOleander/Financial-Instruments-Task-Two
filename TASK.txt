@@ -275,4 +275,28 @@ Tasks:
 			- rebalancing rule
 			- transaction costs
 			- equal weighting
-			- report release date timing
+			- report release date timing 
+
+12. Report Final Results
+	- Your final project should report:
+		- stock ranking
+		- top 10 buy stocks
+		- bottom 10 short stocks
+		- model evaluation results
+		- feature importance
+		- backtest performance
+		- forward-bias controls
+
+Simplified Project Flow
+1. Load data
+2. Extract report signals
+3. Calculate signal changes
+4. Calculate 63-day future Sharpe Ratio
+5. Build modelling dataset
+6. Split data by time
+7. Train simple models
+8. Evaluate models
+9. Combine models into ensemble
+10. Rank stocks
+11. Backtest top 10 and bottom 10 portfolios
+12. Report results
