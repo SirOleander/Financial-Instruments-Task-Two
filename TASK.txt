@@ -299,4 +299,8 @@ Simplified Project Flow
 9. Combine models into ensemble
 10. Rank stocks
 11. Backtest top 10 and bottom 10 portfolios
+<<<<<<< HEAD
 12. Report results
+=======
+12. Report results
+>>>>>>> 92932eb7470d2aa38fb1d5101403c854c6e1ac76
