@@ -3,12 +3,33 @@ import B_database as database
 import C_client as sec_client
 
 
+TARGET_GROUPS = (
+    "TechA",
+)
+
+
+def get_target_tickers() -> list[str]:
+    tickers = []
+
+    for group in TARGET_GROUPS:
+        tickers.extend(config.COMPANY_GROUPS[group])
+
+    tickers = [
+        ticker
+        for ticker in tickers
+        if ticker in config.ACTIVE_TICKERS
+        and config.get_sector(ticker) == "Technology"
+    ]
+
+    return sorted(set(tickers))
+
+
 def main():
     database.create_tables(drop_existing=True)
 
     session = sec_client.make_session()
 
-    tickers = sorted(config.COMPANY_GROUPS["TechA"])
+    tickers = get_target_tickers()
 
     for ticker in tickers:
         print(f"Processing {ticker}...")
@@ -47,14 +68,24 @@ def main():
             candidate_facts=candidate_facts,
         )
 
+        standardized = sec_client.apply_calculated_financial_items(
+            ticker=ticker,
+            standardized=standardized,
+        )
+
         rows = standardized.to_dict("records")
 
         database.insert_financial_facts(rows)
 
-        print(f"Inserted {len(rows)} rows for {ticker}")
+        calculated_count = (
+            standardized["selection_status"]
+            .eq("calculated_from_components")
+            .sum()
+        )
 
-    print("Done. TechA financial data inserted into database.")
-
+        print(
+            f"Inserted {len(rows)} rows for {ticker} "
+        )
 
 if __name__ == "__main__":
     main()

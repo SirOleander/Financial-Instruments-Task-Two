@@ -505,16 +505,17 @@ COMPANY_GROUPS = {
 
 
 # =============================================================================
-# Sector-specific financial positions needed for KPI calculation
+# Group-specific financial positions needed for retrieval
 # =============================================================================
 
 # This is the main retrieval target layer for the current project stage.
 #
-# It defines WHAT financial positions should be retrieved for each project sector.
-# It does not define HOW to retrieve each concept. The "how" is still handled by:
+# It defines WHAT financial positions should be retrieved for each accounting group.
+# It does not define HOW to retrieve each concept. The "how" is handled by:
 # - FINANCIAL_ITEMS_BY_GROUP
-# - INLINE_ANNUAL_FINANCIAL_ITEMS_BY_TICKER
+# - INLINE_FINANCIAL_ITEMS_BY_TICKER
 # - CALCULATED_FINANCIAL_ITEMS_BY_GROUP
+# - CALCULATED_FINANCIAL_ITEMS_BY_TICKER
 #
 # Keep this layer strict:
 # - no revenue breakdowns
@@ -523,37 +524,55 @@ COMPANY_GROUPS = {
 # - no stock data
 # - no strategic/non-financial data
 
-FINANCIAL_POSITIONS_BY_SECTOR = {
-    "Technology": {
-        "required": {
-            "income_statement": (
-                "revenue",
-                "gross_profit",
-                "operating_income",
-                "income_before_tax",
-                "income_tax",
-                "net_income",
-                "research_and_development",
-            ),
-            "balance_sheet": (
-                "cash_and_cash_equivalents",
-                "total_assets",
-                "total_equity",
-                "short_term_debt",
-                "long_term_debt",
-            ),
-            "cash_flow_statement": (
-                "operating_cash_flow",
-                "capital_expenditure",
-            ),
-        },
-        "conditional": {
-            "income_statement": (
-                "cost_of_revenue",
-            ),
-            "balance_sheet": (),
-            "cash_flow_statement": (),
-        },
+FINANCIAL_POSITIONS_BY_GROUP = {
+    "TechA": {
+        "income_statement": (
+            "revenue",
+            "cost_of_revenue",
+            "gross_profit",
+            "research_and_development",
+            "operating_income",
+            "income_before_tax",
+            "income_tax",
+            "net_income",
+        ),
+        "balance_sheet": (
+            "cash_and_cash_equivalents",
+            "total_assets",
+            "total_equity",
+            "commercial_paper",
+            "long_term_debt_current",
+            "short_term_debt",
+            "long_term_debt",
+        ),
+        "cash_flow_statement": (
+            "operating_cash_flow",
+            "capital_expenditure",
+        ),
+    },
+
+    "TechB": {
+        "income_statement": (
+            "revenue",
+            "cost_of_revenue",
+            "gross_profit",
+            "research_and_development",
+            "operating_income",
+            "income_before_tax",
+            "income_tax",
+            "net_income",
+        ),
+        "balance_sheet": (
+            "cash_and_cash_equivalents",
+            "total_assets",
+            "total_equity",
+            "short_term_debt",
+            "long_term_debt",
+        ),
+        "cash_flow_statement": (
+            "operating_cash_flow",
+            "capital_expenditure",
+        ),
     },
 }
 
@@ -563,66 +582,51 @@ FINANCIAL_POSITION_SIGN_RULES = {
 }
 
 
-def get_financial_positions_for_sector(
-    sector: str,
-    include_conditional: bool = True,
+
+def get_financial_positions_for_group(
+    company_group: str,
 ) -> dict[str, tuple[str, ...]]:
-    """Return financial positions to retrieve for a sector, grouped by statement type."""
-    if sector not in FINANCIAL_POSITIONS_BY_SECTOR:
-        raise ValueError(f"Unknown sector: {sector}")
+    """Return financial positions to retrieve for a company group."""
+    if company_group not in FINANCIAL_POSITIONS_BY_GROUP:
+        raise ValueError(f"Unknown company group: {company_group}")
 
-    sector_config = FINANCIAL_POSITIONS_BY_SECTOR[sector]
-    result = {
-        statement: tuple(items)
-        for statement, items in sector_config["required"].items()
+    return {
+        statement_type: tuple(positions)
+        for statement_type, positions in FINANCIAL_POSITIONS_BY_GROUP[company_group].items()
     }
-
-    if include_conditional:
-        for statement, items in sector_config.get("conditional", {}).items():
-            existing = list(result.get(statement, ()))
-            for item in items:
-                if item not in existing:
-                    existing.append(item)
-            result[statement] = tuple(existing)
-
-    return result
 
 
 def get_financial_positions_for_ticker(
     ticker: str,
-    include_conditional: bool = True,
 ) -> dict[str, tuple[str, ...]]:
-    """Return financial positions to retrieve for a ticker's project sector."""
-    return get_financial_positions_for_sector(
-        sector=get_sector(ticker),
-        include_conditional=include_conditional,
+    """Return financial positions to retrieve for a ticker's company group."""
+    return get_financial_positions_for_group(
+        company_group=get_company_group(ticker),
     )
 
 
-def get_flat_financial_positions_for_sector(
-    sector: str,
-    include_conditional: bool = True,
+def get_flat_financial_positions_for_group(
+    company_group: str,
 ) -> tuple[str, ...]:
-    """Return a flat, de-duplicated tuple of financial positions for a sector."""
-    grouped = get_financial_positions_for_sector(sector, include_conditional)
-    positions: list[str] = []
+    """Return a flat, de-duplicated tuple of positions for a company group."""
+    grouped = get_financial_positions_for_group(company_group)
 
-    for items in grouped.values():
-        for item in items:
-            if item not in positions:
-                positions.append(item)
+    positions = []
+
+    for statement_type, statement_positions in grouped.items():
+        for position in statement_positions:
+            if position not in positions:
+                positions.append(position)
 
     return tuple(positions)
 
 
 def get_flat_financial_positions_for_ticker(
     ticker: str,
-    include_conditional: bool = True,
 ) -> tuple[str, ...]:
-    """Return a flat, de-duplicated tuple of financial positions for a ticker."""
-    return get_flat_financial_positions_for_sector(
-        sector=get_sector(ticker),
-        include_conditional=include_conditional,
+    """Return a flat, de-duplicated tuple of positions for a ticker."""
+    return get_flat_financial_positions_for_group(
+        company_group=get_company_group(ticker),
     )
 
 FINANCIAL_ITEMS_BY_GROUP = {
@@ -664,13 +668,27 @@ FINANCIAL_ITEMS_BY_GROUP = {
             "StockholdersEquity",
             "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
         ),
-        "short_term_debt":(
+        "commercial_paper": (
+            "CommercialPaper",
             "ShortTermBorrowings",
-            "LongTermDebtAndCapitalLeaseObligationsCurrent",
+            "ShortTermDebt",
+            "ShortTermDebtCurrent",
         ),
-        "long_term_debt":(
+
+        "long_term_debt_current": (
+            "LongTermDebtCurrent",
+            "LongTermDebtAndCapitalLeaseObligationsCurrent",
+            "LongTermDebtAndFinanceLeaseObligationsCurrent",
+        ),
+
+        "short_term_debt": (
+            
+        ),
+
+        "long_term_debt": (
             "LongTermDebtNoncurrent",
             "LongTermDebtAndCapitalLeaseObligations",
+            "LongTermDebtAndFinanceLeaseObligationsNoncurrent",
         ),
         "operating_cash_flow":(
             "NetCashProvidedByUsedInOperatingActivities",
@@ -758,37 +776,31 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
 }
 
 CALCULATED_FINANCIAL_ITEMS_BY_GROUP = {
-    "TechB": {
-        "cost_of_revenue": {
-            "concept": "calc_cost_of_revenue",
-            "required_items": (
-                "operating_expenses",
-            ),
+    "TechA": {
+        "short_term_debt": {
+            "concept": "calc_short_term_debt",
             "components": (
-                ("operating_expenses", 1),
-                ("selling_general_admin", -1),
-                ("research_and_development", -1),
+                ("commercial_paper", 1),
+                ("long_term_debt_current", 1),
             ),
+            "missing_components_as_zero": True,
+            "require_at_least_one_component": True,
+            "overwrite_existing": True,
         },
+    },
+
+    "TechB": {
         "gross_profit": {
             "concept": "calc_gross_profit",
             "components": (
                 ("revenue", 1),
                 ("cost_of_revenue", -1),
             ),
+            "missing_components_as_zero": False,
+            "require_at_least_one_component": False,
+            "overwrite_existing": False,
         },
-        "operating_income": {
-            "concept": "calc_operating_income",
-            "required_items": (
-                "gross_profit",
-                "operating_income",
-            ),
-            "components": (
-                ("gross_profit", 1),
-                ("operating_income", -1),
-            ),
-        },
-    }
+    },
 } 
 
 CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
@@ -805,151 +817,9 @@ CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
     }
 }
 
-# =============================================================================
-# Financial statement display / output order
-# =============================================================================
 
-FINANCIAL_ITEM_ORDER_BY_GROUP = {
-    "operating_companies": {
-        "revenue": 10,
-        "cost_of_revenue": 20,
-        "gross_profit": 30,
-        "operating_expenses": 40,
-        "research_and_development": 50,
-        "selling_general_admin": 60,
-        "other_operating_expenses": 70,
-        "operating_income": 80,
-        "nonoperating_income": 90,
-        "income_before_tax": 100,
-        "income_tax": 110,
-        "noncontrolling_interest": 120,
-        "net_income": 130,
-    },
-    "operating_companies_sga": {
-        "revenue": 10,
-        "cost_of_revenue": 20,
-        "gross_profit": 30,
-        "operating_expenses": 40,
-        "sales_and_marketing": 50,
-        "general_and_administrative": 60,
-        "research_and_development": 70,
-        "selling_general_admin": 80,
-        "other_operating_expenses": 90,
-        "operating_income": 100,
-        "nonoperating_income": 110,
-        "income_before_tax": 120,
-        "income_tax": 130,
-        "noncontrolling_interest": 140,
-        "net_income": 150,
-    },
-    "operating_companies_cogs": {
-        "revenue": 10,
-        "operating_expenses": 20,
-        "sales_and_marketing": 30,
-        "research_and_development": 40,
-        "general_and_administrative": 50,
-        "selling_general_admin": 60,
-        "other_operating_expenses": 70,
-        "operating_income": 80,
-        "nonoperating_income": 90,
-        "income_before_tax": 100,
-        "income_tax": 110,
-        "noncontrolling_interest": 120,
-        "net_income": 130,
-    },
-    "banks": {
-        "interest_income": 10,
-        "interest_expense": 20,
-        "net_interest_income": 30,
-        "noninterest_income": 40,
-        "revenue": 50,
-        "noninterest_expense": 60,
-        "provision_credit_losses": 70,
-        "income_before_tax": 80,
-        "income_tax": 90,
-        "noncontrolling_interest": 99,
-        "net_income": 100,
-    },
-    "financial_services_non_bank": {
-        "revenue": 10,
-        "operating_expenses": 20,
-        "operating_income": 30,
-        "nonoperating_income": 40,
-        "income_before_tax": 50,
-        "income_tax": 60,
-        "noncontrolling_interest": 66,
-        "net_income": 70,
-    },
-    "managed_care": {
-        "revenue": 10,
-        "operating_expenses": 20,
-        "depreciation": 30,
-        "operating_income": 40,
-        "income_before_tax": 50,
-        "income_tax": 60,
-        "net_income": 70,
-    },
-    "conglomerate": {
-        "revenue": 10,
-        "investment_gains_losses": 20,
-        "operating_expenses": 30,
-        "operating_income": 40,
-        "nonoperating_income": 50,
-        "income_before_tax": 60,
-        "income_tax": 70,
-        "noncontrolling_interest": 71,
-        "net_income": 80,
-    },
-    "utilities": {
-        "revenue": 10,
-        "operating_expenses": 20,
-        "fuel_power": 30,
-        "depreciation": 40,
-        "gains_disposal": 50,
-        "operating_income": 60,
-        "nonoperating_income": 70,
-        "income_before_tax": 80,
-        "income_tax": 90,
-        "net_income": 100,
-    },
-    "telecom": {
-        "revenue": 10,
-        "cost_of_revenue": 20,
-        "gross_profit": 30,
-        "operating_expenses": 40,
-        "selling_general_admin": 50,
-        "depreciation": 60,
-        "operating_income": 70,
-        "income_before_tax": 80,
-        "income_tax": 90,
-        "net_income": 100,
-    },
-    "energy": {
-        "revenue": 10,
-        "operating_expenses": 20,
-        "selling_general_admin": 30,
-        "depreciation": 40,
-        "exploration": 50,
-        "income_before_tax": 60,
-        "income_tax": 70,
-        "net_income": 80,
-    },
-    "special_cases": {
-        "revenue": 10,
-        "cost_of_revenue": 20,
-        "gross_profit": 30,
-        "operating_expenses": 40,
-        "selling_general_admin": 50,
-        "research_and_development": 60,
-        "operating_income": 70,
-        "nonoperating_income": 80,
-        "income_tax": 90,
-        "net_income": 100,
-    },
-}
-
-
-
+# Optional display order mapping. Add group-specific ordering later if needed.
+FINANCIAL_ITEM_ORDER_BY_GROUP = {}
 
 # =============================================================================
 # Additional concept candidates for sector-position retrieval
@@ -1109,15 +979,23 @@ def get_financial_items_for_ticker(ticker: str) -> dict[str, tuple[str, ...]]:
 
 
 def get_inline_annual_financial_items_for_ticker(ticker: str) -> dict:
-    """Return ticker-specific annual financial-statement overrides."""
-    return INLINE_ANNUAL_FINANCIAL_ITEMS_BY_TICKER.get(ticker, {})
+    """Return ticker-specific inline/iXBRL financial-statement overrides."""
+    return INLINE_FINANCIAL_ITEMS_BY_TICKER.get(ticker, {})
 
 
 def get_calculated_financial_items_for_ticker(ticker: str) -> dict:
-    """Return calculated financial-statement item rules for a ticker."""
+    """Return group-level and ticker-specific calculated financial item rules."""
     company_group = get_company_group(ticker)
 
-    return CALCULATED_FINANCIAL_ITEMS_BY_GROUP.get(company_group, {})
+    rules = {}
+
+    group_rules = CALCULATED_FINANCIAL_ITEMS_BY_GROUP.get(company_group, {})
+    ticker_rules = CALCULATED_FINANCIAL_ITEMS_BY_TICKER.get(ticker, {})
+
+    rules.update(group_rules)
+    rules.update(ticker_rules)
+
+    return rules
 
 
 def get_financial_item_display_order(
@@ -1178,20 +1056,27 @@ def validate_config() -> None:
             f"Active tickers mapped to inactive sectors: {active_tickers_wrong_sector}"
         )
 
-    missing_sector_position_configs = sorted(
-        set(ACTIVE_SECTORS) - set(FINANCIAL_POSITIONS_BY_SECTOR)
+    active_company_groups = {
+        get_company_group(ticker)
+        for ticker in ACTIVE_TICKERS
+    }
+
+    missing_active_group_position_configs = sorted(
+        active_company_groups - set(FINANCIAL_POSITIONS_BY_GROUP)
     )
-    if missing_sector_position_configs:
+    if missing_active_group_position_configs:
         raise ValueError(
-            f"Active sectors missing financial position config: {missing_sector_position_configs}"
+            "Active company groups missing financial position config: "
+            f"{missing_active_group_position_configs}"
         )
 
-    inactive_sector_position_configs = sorted(
-        set(FINANCIAL_POSITIONS_BY_SECTOR) - set(ACTIVE_SECTORS)
+    missing_active_group_item_configs = sorted(
+        active_company_groups - set(FINANCIAL_ITEMS_BY_GROUP)
     )
-    if inactive_sector_position_configs:
+    if missing_active_group_item_configs:
         raise ValueError(
-            f"Financial position configs exist for inactive sectors: {inactive_sector_position_configs}"
+            "Active company groups missing financial item concept config: "
+            f"{missing_active_group_item_configs}"
         )
 
     grouped_tickers = {

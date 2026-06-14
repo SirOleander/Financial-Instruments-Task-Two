@@ -51,18 +51,18 @@ def get_techa_tickers() -> list[str]:
 
 
 def get_positions_for_ticker(ticker: str) -> tuple[str, ...]:
-    return config.get_flat_financial_positions_for_ticker(
-        ticker,
-        include_conditional=True,
-    )
+    return config.get_flat_financial_positions_for_ticker(ticker)
 
 
 def get_position_statement_map(ticker: str) -> dict[str, str]:
-    grouped = config.get_financial_positions_for_ticker(ticker, include_conditional=True)
-    result: dict[str, str] = {}
+    grouped = config.get_financial_positions_for_ticker(ticker)
+
+    result = {}
+
     for statement_type, positions in grouped.items():
         for position in positions:
             result[position] = statement_type
+
     return result
 
 
@@ -241,6 +241,98 @@ def select_best_fact(
 
     return valid_duration.iloc[0], "selected_default_duration_fact"
 
+def apply_calculated_financial_items(
+    ticker: str,
+    standardized: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Apply calculated financial item rules from A_config.py.
+
+    Works per filing/accession number.
+    Supports:
+    - missing components as zero
+    - overwrite existing values
+    - multi-pass calculations where one calculated item depends on another
+    """
+    calculation_rules = config.get_calculated_financial_items_for_ticker(ticker)
+
+    if not calculation_rules:
+        return standardized
+
+    df = standardized.copy()
+
+    for accession_number in df["accession_number"].dropna().unique():
+        filing_mask = df["accession_number"] == accession_number
+
+        for _ in range(5):
+            changed_anything = False
+
+            for target_position, rule in calculation_rules.items():
+                target_mask = filing_mask & (df["position"] == target_position)
+
+                if not target_mask.any():
+                    continue
+
+                current_value = df.loc[target_mask, "value"].iloc[0]
+                overwrite_existing = rule.get("overwrite_existing", False)
+
+                if pd.notna(current_value) and not overwrite_existing:
+                    continue
+
+                calculated_value = 0
+                missing_components = []
+                found_component_count = 0
+
+                missing_components_as_zero = rule.get(
+                    "missing_components_as_zero",
+                    False,
+                )
+                require_at_least_one_component = rule.get(
+                    "require_at_least_one_component",
+                    False,
+                )
+
+                for component_position, weight in rule["components"]:
+                    component_mask = filing_mask & (
+                        df["position"] == component_position
+                    )
+
+                    if not component_mask.any():
+                        if missing_components_as_zero:
+                            continue
+                        missing_components.append(component_position)
+                        continue
+
+                    component_value = df.loc[component_mask, "value"].iloc[0]
+
+                    if pd.isna(component_value):
+                        if missing_components_as_zero:
+                            continue
+                        missing_components.append(component_position)
+                        continue
+
+                    calculated_value += weight * component_value
+                    found_component_count += 1
+
+                if missing_components:
+                    continue
+
+                if require_at_least_one_component and found_component_count == 0:
+                    continue
+
+                df.loc[target_mask, "value"] = calculated_value
+                df.loc[target_mask, "concept"] = rule["concept"]
+                df.loc[target_mask, "taxonomy"] = "calculated"
+                df.loc[target_mask, "unit"] = config.TARGET_CURRENCY
+                df.loc[target_mask, "reporting_currency"] = config.TARGET_CURRENCY
+                df.loc[target_mask, "selection_status"] = "calculated_from_components"
+
+                changed_anything = True
+
+            if not changed_anything:
+                break
+
+    return df
 
 def build_standardized_rows(
     ticker: str,
