@@ -373,135 +373,42 @@ ACTIVE_TICKERS = (
 
 # These groups are for financial-statement extraction logic only.
 # They are not the same as the project sector groups above.
+
 COMPANY_GROUPS = {
-    "TechA":(
+    "TechA": (
         "AAPL",
-        "AMAT",
+        "MSFT",
+    ),
+
+    "TechB": (
         "AMD",
+        "AMAT",
         "APH",
-        "APP",
         "AVGO",
         "CRM",
         "CSCO",
         "INTC",
         "LRCX",
-        "MSFT",
         "MU",
         "NOW",
         "NVDA",
         "PLTR",
         "TXN",
+    ),
 
+    # Technology companies with different reporting structures or frequently
+    # missing standardized positions. This is the next validation group.
+    "TechC": (
+        "ACN",   # No clean gross profit in standard companyfacts form
+        "APP",   # No gross profit
+        "IBM",   # No clean operating income; do not calculate generically
+        "INTU",  # No clean COGS / cost of revenue in the usual form
+        "KLAC",  # No gross profit
+        "ORCL",  # ORCL-specific cost-of-revenue components via iXBRL
+        "QCOM",  # No gross profit
     ),
-    "TechB":( #No Gross Profit, No Operating Income, No COGS
-        "ACN", #No GP
-        "APP", #No GP
-        "IBM", #No OI
-        "INTU", #No COGS
-        "KLAC", #No GP
-        "ORCL", #No COGS and GP
-        "QCOM", #No GP
 
-
-    ),
-    "banks": (
-        "AXP",
-        "JPM",
-        "BAC",
-        "MS",
-        "GS",
-        "WFC",
-        "C",
-        "SCHW",
-    ),
-    "financial_services_non_bank": (
-        "V",
-        "MA",
-        "BLK",
-        "SPGI",
-    ),
-    "conglomerate": (
-        "BRK-B",
-    ),
-    "managed_care": (
-        "UNH",
-    ),
-    "utilities": (
-        "NEE",
-    ),
-    "telecom": (
-        "VZ",
-        "T",
-    ),
-    "energy": (
-        "XOM",
-        "CVX",
-    ),
-    "special_cases": (
-        "GE",
-        "GEV",
-    ),
-    "operating_companies": (
-        "AAPL",
-        "ABBV",
-        "ABT",
-        "AMAT",
-        "AMD",
-        "AMGN",
-        "APH",
-        "AVGO",
-        "CAT",
-        "COST",
-        "DIS",
-        "HD",
-        "IBM",
-        "INTC",
-        "ISRG",
-        "JNJ",
-        "KLAC",
-        "KO",
-        "LIN",
-        "LLY",
-        "LRCX",
-        "MRK",
-        "MU",
-        "NVDA",
-        "PEP",
-        "PG",
-        "PM",
-        "QCOM",
-        "RTX",
-        "TJX",
-        "TMO",
-        "TSLA",
-        "TXN",
-        "WMT",
-    ),
-    "operating_companies_cogs": (
-        "BKNG",
-        "INTU",
-        "MCD",
-        "ORCL",
-    ),
-    "operating_companies_sga": (
-        "ACN",
-        "AMZN",
-        "APP",
-        "BA",
-        "CRM",
-        "CSCO",
-        "GOOG",
-        "GOOGL",
-        "META",
-        "MSFT",
-        "NFLX",
-        "NOW",
-        "PLTR",
-        "UBER",
-    ),
 }
-
-
 
 
 # =============================================================================
@@ -510,12 +417,15 @@ COMPANY_GROUPS = {
 
 # This is the main retrieval target layer for the current project stage.
 #
-# It defines WHAT financial positions should be retrieved for each accounting group.
-# It does not define HOW to retrieve each concept. The "how" is handled by:
-# - FINANCIAL_ITEMS_BY_GROUP
-# - INLINE_FINANCIAL_ITEMS_BY_TICKER
-# - CALCULATED_FINANCIAL_ITEMS_BY_GROUP
-# - CALCULATED_FINANCIAL_ITEMS_BY_TICKER
+# It defines WHAT financial positions should be retrieved for each accounting
+# group. It does not define HOW to retrieve each concept. The "how" is handled by:
+# - FINANCIAL_ITEMS_BY_GROUP            (companyfacts US-GAAP concept candidates)
+# - INLINE_FINANCIAL_ITEMS_BY_TICKER    (targeted iXBRL fallback rules)
+# - CALCULATED_FINANCIAL_ITEMS_BY_GROUP (group-level calculated positions)
+# - CALCULATED_FINANCIAL_ITEMS_BY_TICKER(ticker-level calculated positions)
+#
+# Every position listed here for an ACTIVE group must be resolvable by at least
+# one of those mechanisms. validate_config() enforces this at import time.
 #
 # Keep this layer strict:
 # - no revenue breakdowns
@@ -574,13 +484,36 @@ FINANCIAL_POSITIONS_BY_GROUP = {
             "capital_expenditure",
         ),
     },
+
+    "TechC": {
+        "income_statement": (
+            "revenue",
+            "cost_of_revenue",
+            "gross_profit",
+            "research_and_development",
+            "operating_income",
+            "income_before_tax",
+            "income_tax",
+            "net_income",
+        ),
+        "balance_sheet": (
+            "cash_and_cash_equivalents",
+            "total_assets",
+            "total_equity",
+            "short_term_debt",
+            "long_term_debt",
+        ),
+        "cash_flow_statement": (
+            "operating_cash_flow",
+            "capital_expenditure",
+        ),
+    },
 }
 
 
 FINANCIAL_POSITION_SIGN_RULES = {
     "capital_expenditure": "store_positive_absolute_value",
 }
-
 
 
 def get_financial_positions_for_group(
@@ -611,9 +544,9 @@ def get_flat_financial_positions_for_group(
     """Return a flat, de-duplicated tuple of positions for a company group."""
     grouped = get_financial_positions_for_group(company_group)
 
-    positions = []
+    positions: list[str] = []
 
-    for statement_type, statement_positions in grouped.items():
+    for statement_positions in grouped.values():
         for position in statement_positions:
             if position not in positions:
                 positions.append(position)
@@ -625,9 +558,8 @@ def get_flat_financial_positions_for_ticker(
     ticker: str,
 ) -> tuple[str, ...]:
     """Return a flat, de-duplicated tuple of positions for a ticker."""
-    return get_flat_financial_positions_for_group(
-        company_group=get_company_group(ticker),
-    )
+    return get_flat_financial_positions_for_group(get_company_group(ticker))
+
 
 FINANCIAL_ITEMS_BY_GROUP = {
     "TechA": {
@@ -636,7 +568,6 @@ FINANCIAL_ITEMS_BY_GROUP = {
         ),
         "cost_of_revenue": (
             "CostOfGoodsAndServicesSold",
-            "CostOfRevenue",
         ),
         "gross_profit": (
             "GrossProfit",
@@ -656,48 +587,36 @@ FINANCIAL_ITEMS_BY_GROUP = {
         ),
         "net_income": (
             "NetIncomeLoss",
-            "ProfitLoss",
         ),
-        "cash_and_cash_equivalents":(
+        "cash_and_cash_equivalents": (
             "CashAndCashEquivalentsAtCarryingValue",
         ),
-        "total_assets":(
+        "total_assets": (
             "Assets",
         ),
-        "total_equity":(
+        "total_equity": (
             "StockholdersEquity",
-            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
         ),
         "commercial_paper": (
             "CommercialPaper",
-            "ShortTermBorrowings",
-            "ShortTermDebt",
-            "ShortTermDebtCurrent",
         ),
-
         "long_term_debt_current": (
             "LongTermDebtCurrent",
-            "LongTermDebtAndCapitalLeaseObligationsCurrent",
-            "LongTermDebtAndFinanceLeaseObligationsCurrent",
         ),
-
         "short_term_debt": (
             
         ),
-
         "long_term_debt": (
             "LongTermDebtNoncurrent",
-            "LongTermDebtAndCapitalLeaseObligations",
-            "LongTermDebtAndFinanceLeaseObligationsNoncurrent",
         ),
-        "operating_cash_flow":(
+        "operating_cash_flow": (
             "NetCashProvidedByUsedInOperatingActivities",
         ),
-        "capital_expenditure":(
+        "capital_expenditure": (
             "PaymentsToAcquirePropertyPlantAndEquipment",
-
         ),
     },
+
     "TechB": {
         "revenue": (
             "Revenues",
@@ -712,25 +631,12 @@ FINANCIAL_ITEMS_BY_GROUP = {
         "gross_profit": (
             "GrossProfit",
         ),
-        "operating_expenses": (
-            "OperatingExpenses",
-        ),
-        "sales_and_marketing": (
-            "SellingAndMarketingExpense",
-            "MarketingExpense",
-        ),
         "research_and_development": (
             "ResearchAndDevelopmentExpense",
             "TechnologyAndDevelopmentExpense",
         ),
-        "general_and_administrative": (
-            "GeneralAndAdministrativeExpense",
-        ),
         "operating_income": (
             "OperatingIncomeLoss",
-        ),
-        "nonoperating_income": (
-            "NonoperatingIncomeExpense",
         ),
         "income_before_tax": (
             "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
@@ -743,8 +649,97 @@ FINANCIAL_ITEMS_BY_GROUP = {
             "NetIncomeLoss",
             "ProfitLoss",
         ),
+        "cash_and_cash_equivalents": (
+            "CashAndCashEquivalentsAtCarryingValue",
+            "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+        ),
+        "total_assets": (
+            "Assets",
+        ),
+        "total_equity": (
+            "StockholdersEquity",
+            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+        ),
+        "short_term_debt": (
+            "DebtCurrent",
+            "ShortTermBorrowings",
+            "ShortTermDebt",
+            "ShortTermDebtCurrent",
+            "LongTermDebtCurrent",
+            "LongTermDebtAndCapitalLeaseObligationsCurrent",
+            "ConvertibleDebtCurrent",
+        ),
+        "long_term_debt": (
+            "LongTermDebtNoncurrent",
+            "LongTermDebtAndCapitalLeaseObligations",
+            "LongTermDebtAndFinanceLeaseObligationsNoncurrent",
+            "ConvertibleLongTermNotesPayable",
+        ),
+        "operating_cash_flow": (
+            "NetCashProvidedByUsedInOperatingActivities",
+        ),
+        "capital_expenditure": (
+            "PaymentsToAcquirePropertyPlantAndEquipment",
+            "PaymentsToAcquireProductiveAssets",
+        ),
     },
 
+    "TechC": {
+        "revenue": (
+            "RevenueFromContractWithCustomerExcludingAssessedTax",
+        ),
+        "cost_of_revenue": (
+            "CostOfGoodsAndServicesSold",
+            "CostOfRevenue",
+        ),
+        "gross_profit": (
+            "GrossProfit",
+        ),
+        "research_and_development": (
+            "ResearchAndDevelopmentExpense",
+        ),
+        "operating_income": (
+            "OperatingIncomeLoss",
+        ),
+        "income_before_tax": (
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+        ),
+        "income_tax": (
+            "IncomeTaxExpenseBenefit",
+        ),
+        "net_income": (
+            "NetIncomeLoss",
+            "ProfitLoss",
+        ),
+        "cash_and_cash_equivalents": (
+            "CashAndCashEquivalentsAtCarryingValue",
+        ),
+        "total_assets": (
+            "Assets",
+        ),
+        "total_equity": (
+            "StockholdersEquity",
+            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+        ),
+        "short_term_debt": (
+            "LongTermDebtAndCapitalLeaseObligationsCurrent",
+            "ConvertibleDebtCurrent",
+            "DebtCurrent",
+            "LongTermDebtCurrent",
+        ),
+        "long_term_debt": (
+            "LongTermDebtNoncurrent",
+            "LongTermDebtAndCapitalLeaseObligations",
+            "LongTermDebtAndFinanceLeaseObligationsNoncurrent",
+        ),
+        "operating_cash_flow": (
+            "NetCashProvidedByUsedInOperatingActivities",
+        ),
+        "capital_expenditure": (
+            "PaymentsToAcquirePropertyPlantAndEquipment",
+        ),
+    },
 }
 
 
@@ -753,6 +748,33 @@ FINANCIAL_ITEMS_BY_GROUP = {
 # =============================================================================
 
 INLINE_FINANCIAL_ITEMS_BY_TICKER = {
+    "AAPL": {
+        "commercial_paper": {
+            "concepts": (
+                "CommercialPaper",
+            ),
+            "statement_type": "balance_sheet",
+            "required_axis_member": {
+                "ShortTermDebtTypeAxis": "CommercialPaperMember",
+            },
+        },
+    },
+    "LRCX": {
+        "cost_of_revenue":{
+            "concepts": (
+                "CostOfGoodsAndServicesSoldExcludingRestructuringCharges",
+            ),
+            "statement_type": "income_statement",
+        },
+    },
+    "NVDA": {
+        "capital_expenditure":{
+            "concepts":(
+                "PurchasesOfPropertyAndEquipmentAndIntangibleAssets",
+            ),
+            "statement_type": "cash_flow_statement",
+        },
+    },
     "ORCL": {
         "cloud_services_and_license_support_cost": {
             "concepts": (
@@ -772,8 +794,9 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             ),
             "statement_type": "income_statement",
         },
-    }
+    },
 }
+
 
 CALCULATED_FINANCIAL_ITEMS_BY_GROUP = {
     "TechA": {
@@ -790,6 +813,10 @@ CALCULATED_FINANCIAL_ITEMS_BY_GROUP = {
     },
 
     "TechB": {
+        # Use only the defensible generic TechB calculation. If either revenue
+        # or cost_of_revenue is missing, gross_profit remains missing rather
+        # than being invented. IBM operating_income is deliberately not
+        # calculated generically.
         "gross_profit": {
             "concept": "calc_gross_profit",
             "components": (
@@ -801,33 +828,51 @@ CALCULATED_FINANCIAL_ITEMS_BY_GROUP = {
             "overwrite_existing": False,
         },
     },
-} 
+}
+
 
 CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
     "ORCL": {
+        # ORCL does not report a single cost_of_revenue line. It is rebuilt from
+        # company-specific iXBRL component costs. The calculator runs in
+        # multiple passes, so gross_profit can then use this result.
         "cost_of_revenue": {
-            "concept": "CALCULATED_ORCL_REVENUE_RELATED_COSTS",
+            "concept": "calc_orcl_cost_of_revenue",
             "components": (
                 ("cloud_services_and_license_support_cost", 1),
                 ("hardware_cost", 1),
                 ("services_cost", 1),
             ),
+            "missing_components_as_zero": False,
+            "require_at_least_one_component": False,
+            "overwrite_existing": False,
             "quality": "company_specific_calculation",
         },
-    }
+        "gross_profit": {
+            "concept": "calc_gross_profit",
+            "components": (
+                ("revenue", 1),
+                ("cost_of_revenue", -1),
+            ),
+            "missing_components_as_zero": False,
+            "require_at_least_one_component": False,
+            "overwrite_existing": False,
+        },
+    },
 }
 
 
-# Optional display order mapping. Add group-specific ordering later if needed.
 FINANCIAL_ITEM_ORDER_BY_GROUP = {}
 
 # =============================================================================
-# Additional concept candidates for sector-position retrieval
+# Shared fallback concept candidates
 # =============================================================================
 
-# This mapping complements FINANCIAL_ITEMS_BY_GROUP, which mainly comes from
-# income statement extraction. The sector-position layer also needs balance
-# sheet, cash flow, and selected bank/regulatory items.
+# This mapping complements FINANCIAL_ITEMS_BY_GROUP. It is used by
+# get_concepts_for_financial_position() ONLY when a position is not defined in
+# the ticker's group-level item mapping. It provides generic balance sheet,
+# cash flow, and (for future non-Technology groups) bank/regulatory concept
+# candidates so new groups can be added without redefining every concept.
 
 FINANCIAL_POSITION_CONCEPTS = {
     "cash_and_cash_equivalents": (
@@ -935,12 +980,26 @@ def get_cik(ticker: str) -> str:
 
 
 def get_company_group(ticker: str) -> str:
-    """Return accounting presentation group for a ticker."""
-    for group_name, tickers in COMPANY_GROUPS.items():
-        if ticker in tickers:
-            return group_name
+    """Return accounting presentation group for a ticker.
 
-    return "operating_companies"
+    The project now uses explicit group-based retrieval only.
+    Therefore every active ticker must appear in exactly one company group.
+    """
+    matching_groups = [
+        group_name
+        for group_name, tickers in COMPANY_GROUPS.items()
+        if ticker in tickers
+    ]
+
+    if not matching_groups:
+        raise KeyError(f"Ticker is missing accounting group: {ticker}")
+
+    if len(matching_groups) > 1:
+        raise ValueError(
+            f"Ticker appears in multiple accounting groups: {ticker} -> {matching_groups}"
+        )
+
+    return matching_groups[0]
 
 
 def get_sector(ticker: str) -> str:
@@ -978,8 +1037,8 @@ def get_financial_items_for_ticker(ticker: str) -> dict[str, tuple[str, ...]]:
     )
 
 
-def get_inline_annual_financial_items_for_ticker(ticker: str) -> dict:
-    """Return ticker-specific inline/iXBRL financial-statement overrides."""
+def get_inline_financial_items_for_ticker(ticker: str) -> dict:
+    """Return ticker-specific inline XBRL extraction rules."""
     return INLINE_FINANCIAL_ITEMS_BY_TICKER.get(ticker, {})
 
 
@@ -1018,7 +1077,7 @@ def get_all_company_tickers() -> list[str]:
 
 
 def validate_config() -> None:
-    """Run basic config consistency checks."""
+    """Run basic config consistency checks for the current active universe."""
     missing_names = sorted(set(COMPANIES) - set(COMPANY_NAMES))
     if missing_names:
         raise ValueError(f"Companies missing display names: {missing_names}")
@@ -1037,7 +1096,6 @@ def validate_config() -> None:
     if invalid_sectors:
         raise ValueError(f"Invalid sector names: {invalid_sectors}")
 
-
     inactive_active_sectors = sorted(set(ACTIVE_SECTORS) - set(VALID_SECTORS))
     if inactive_active_sectors:
         raise ValueError(f"Active sectors are not valid sectors: {inactive_active_sectors}")
@@ -1054,6 +1112,42 @@ def validate_config() -> None:
     if active_tickers_wrong_sector:
         raise ValueError(
             f"Active tickers mapped to inactive sectors: {active_tickers_wrong_sector}"
+        )
+
+    grouped_tickers = {
+        ticker
+        for tickers in COMPANY_GROUPS.values()
+        for ticker in tickers
+    }
+
+    unknown_group_tickers = sorted(grouped_tickers - set(COMPANIES))
+    if unknown_group_tickers:
+        raise ValueError(
+            f"Accounting groups contain non-US or unknown tickers: {unknown_group_tickers}"
+        )
+
+    # Only active tickers must have accounting groups during the current retrieval stage.
+    # This lets you add future sector/company groups gradually.
+    active_tickers_missing_groups = sorted(set(ACTIVE_TICKERS) - grouped_tickers)
+    if active_tickers_missing_groups:
+        raise ValueError(
+            f"Active tickers missing accounting groups: {active_tickers_missing_groups}"
+        )
+
+    duplicate_group_memberships = {}
+    for ticker in ACTIVE_TICKERS:
+        groups = [
+            group_name
+            for group_name, tickers in COMPANY_GROUPS.items()
+            if ticker in tickers
+        ]
+        if len(groups) > 1:
+            duplicate_group_memberships[ticker] = groups
+
+    if duplicate_group_memberships:
+        raise ValueError(
+            "Active tickers assigned to multiple accounting groups: "
+            f"{duplicate_group_memberships}"
         )
 
     active_company_groups = {
@@ -1079,19 +1173,137 @@ def validate_config() -> None:
             f"{missing_active_group_item_configs}"
         )
 
-    grouped_tickers = {
-        ticker
-        for tickers in COMPANY_GROUPS.values()
-        for ticker in tickers
-    }
-    missing_groups = sorted(set(COMPANIES) - grouped_tickers)
-    if missing_groups:
-        raise ValueError(f"Companies missing accounting groups: {missing_groups}")
+    _validate_positions_resolvable(active_company_groups)
+    _validate_calculation_components_resolvable(active_company_groups)
 
-    unknown_group_tickers = sorted(grouped_tickers - set(COMPANIES))
-    if unknown_group_tickers:
+
+def _position_has_concepts(company_group: str, position: str) -> bool:
+    """Return True if a position resolves to a non-empty concept candidate list.
+
+    This mirrors the shadowing logic in get_concepts_for_financial_position():
+    a group-level item mapping (even an empty one) hides the shared fallback.
+    """
+    group_items = FINANCIAL_ITEMS_BY_GROUP.get(company_group, {})
+
+    if position in group_items:
+        return bool(group_items[position])
+
+    return bool(FINANCIAL_POSITION_CONCEPTS.get(position))
+
+
+def _validate_positions_resolvable(active_company_groups: set[str]) -> None:
+    """Ensure every active position can be retrieved or calculated.
+
+    A position is resolvable if it has at least one of:
+    - a non-empty companyfacts concept candidate list,
+    - a group-level or ticker-level calculation rule,
+    - a ticker-level iXBRL fallback rule.
+
+    This catches positions that would silently stay empty forever, such as a
+    short_term_debt position with no concepts and no calculation rule.
+    """
+    unresolvable: list[str] = []
+
+    for company_group in sorted(active_company_groups):
+        group_tickers = [
+            ticker
+            for ticker in ACTIVE_TICKERS
+            if get_company_group(ticker) == company_group
+        ]
+        group_calc_rules = CALCULATED_FINANCIAL_ITEMS_BY_GROUP.get(company_group, {})
+
+        for position in get_flat_financial_positions_for_group(company_group):
+            has_concepts = _position_has_concepts(company_group, position)
+            has_group_calc = position in group_calc_rules
+            has_ticker_calc = any(
+                position in CALCULATED_FINANCIAL_ITEMS_BY_TICKER.get(ticker, {})
+                for ticker in group_tickers
+            )
+            has_inline = any(
+                position in INLINE_FINANCIAL_ITEMS_BY_TICKER.get(ticker, {})
+                for ticker in group_tickers
+            )
+
+            if not (has_concepts or has_group_calc or has_ticker_calc or has_inline):
+                unresolvable.append(f"{company_group}:{position}")
+
+    if unresolvable:
         raise ValueError(
-            f"Accounting groups contain non-US or unknown tickers: {unknown_group_tickers}"
+            "Active positions with no concept mapping, calculation rule, or "
+            f"iXBRL rule: {unresolvable}"
+        )
+
+
+def _component_resolvable_for_group_tickers(
+    company_group: str,
+    position: str,
+    tickers: list[str],
+) -> bool:
+    """Return True if a calculation component can be built for a group.
+
+    Calculation components are sometimes normal output positions and sometimes
+    ticker-specific iXBRL helper positions. This validation keeps both cases
+    explicit and catches rules that reference components that will never be
+    retrieved.
+    """
+    group_calc_rules = CALCULATED_FINANCIAL_ITEMS_BY_GROUP.get(company_group, {})
+
+    if _position_has_concepts(company_group, position):
+        return True
+
+    if position in group_calc_rules:
+        return True
+
+    if any(position in INLINE_FINANCIAL_ITEMS_BY_TICKER.get(ticker, {}) for ticker in tickers):
+        return True
+
+    if any(position in CALCULATED_FINANCIAL_ITEMS_BY_TICKER.get(ticker, {}) for ticker in tickers):
+        return True
+
+    return False
+
+
+def _validate_calculation_components_resolvable(active_company_groups: set[str]) -> None:
+    """Ensure every configured calculation references retrievable components."""
+    unresolvable_components: list[str] = []
+
+    for company_group in sorted(active_company_groups):
+        group_tickers = [
+            ticker
+            for ticker in ACTIVE_TICKERS
+            if get_company_group(ticker) == company_group
+        ]
+
+        group_rules = CALCULATED_FINANCIAL_ITEMS_BY_GROUP.get(company_group, {})
+        for target_position, rule in group_rules.items():
+            for component_position, _weight in rule["components"]:
+                if not _component_resolvable_for_group_tickers(
+                    company_group=company_group,
+                    position=component_position,
+                    tickers=group_tickers,
+                ):
+                    unresolvable_components.append(
+                        f"{company_group}:{target_position} <- {component_position}"
+                    )
+
+        for ticker in group_tickers:
+            ticker_rules = CALCULATED_FINANCIAL_ITEMS_BY_TICKER.get(ticker, {})
+            for target_position, rule in ticker_rules.items():
+                for component_position, _weight in rule["components"]:
+                    if not _component_resolvable_for_group_tickers(
+                        company_group=company_group,
+                        position=component_position,
+                        tickers=[ticker],
+                    ):
+                        unresolvable_components.append(
+                            f"{ticker}:{target_position} <- {component_position}"
+                        )
+
+    if unresolvable_components:
+        raise ValueError(
+            "Calculated financial items reference components with no concept "
+            "mapping, calculation rule, or iXBRL rule: "
+            f"{unresolvable_components}"
         )
 
 

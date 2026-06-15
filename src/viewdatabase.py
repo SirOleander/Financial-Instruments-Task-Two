@@ -19,6 +19,7 @@ financial_facts = pd.read_sql_query(
         company_group,
         position,
         value,
+        concept,
         form,
         fiscal_period_end_date
     FROM financial_facts

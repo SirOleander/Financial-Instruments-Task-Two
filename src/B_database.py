@@ -6,6 +6,47 @@ from typing import Any
 DATABASE_PATH = Path("data/financials.db")
 
 
+def _to_sqlite_value(value: Any) -> Any:
+    """Normalize a value into something sqlite3 can bind.
+
+    sqlite3 can only bind None, int, float, str, and bytes. The extraction
+    client produces pandas/numpy values that are not directly bindable:
+    - pandas missing markers (NaN, NaT, NA) must become SQL NULL,
+    - numpy scalar types (numpy.int64, numpy.float64, ...) must become native
+      Python scalars,
+    - pandas Timestamp values must become strings.
+
+    Types are detected by class name so this module stays free of a hard
+    pandas/numpy import and remains a thin, transparent database layer.
+    """
+    if value is None:
+        return None
+
+    type_name = type(value).__name__
+
+    # pandas missing-value markers -> SQL NULL
+    if type_name in ("NaTType", "NAType"):
+        return None
+
+    # pandas Timestamp -> ISO string (dates are normally already strings;
+    # this is a safety net for unexpected datetime-typed values).
+    if type_name == "Timestamp":
+        return value.isoformat()
+
+    # numpy scalar -> native Python scalar (numpy.int64 is NOT a Python int)
+    if hasattr(value, "item") and not isinstance(value, (str, bytes, bytearray)):
+        try:
+            value = value.item()
+        except (ValueError, AttributeError):
+            pass
+
+    # NaN (including numpy.nan after .item()) -> SQL NULL
+    if isinstance(value, float) and value != value:
+        return None
+
+    return value
+
+
 def get_connection() -> sqlite3.Connection:
     """Create a SQLite database connection."""
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -124,6 +165,10 @@ def insert_financial_facts(rows: list[dict[str, Any]]) -> None:
         cleaned.setdefault("label", None)
         cleaned.setdefault("fiscal_year", None)
         cleaned.setdefault("fiscal_period", None)
+
+        # Normalize every value so pandas NA/NaT, numpy scalars, and timestamps
+        # can be bound by sqlite3 without raising.
+        cleaned = {key: _to_sqlite_value(value) for key, value in cleaned.items()}
 
         cleaned_rows.append(cleaned)
 
