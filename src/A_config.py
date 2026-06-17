@@ -633,7 +633,6 @@ FINANCIAL_ITEMS_BY_GROUP = {
         ),
         "research_and_development": (
             "ResearchAndDevelopmentExpense",
-            "TechnologyAndDevelopmentExpense",
         ),
         "operating_income": (
             "OperatingIncomeLoss",
@@ -663,16 +662,12 @@ FINANCIAL_ITEMS_BY_GROUP = {
         "short_term_debt": (
             "DebtCurrent",
             "ShortTermBorrowings",
-            "ShortTermDebt",
-            "ShortTermDebtCurrent",
             "LongTermDebtCurrent",
             "LongTermDebtAndCapitalLeaseObligationsCurrent",
-            "ConvertibleDebtCurrent",
         ),
         "long_term_debt": (
             "LongTermDebtNoncurrent",
             "LongTermDebtAndCapitalLeaseObligations",
-            "LongTermDebtAndFinanceLeaseObligationsNoncurrent",
             "ConvertibleLongTermNotesPayable",
         ),
         "operating_cash_flow": (
@@ -687,6 +682,7 @@ FINANCIAL_ITEMS_BY_GROUP = {
     "TechC": {
         "revenue": (
             "RevenueFromContractWithCustomerExcludingAssessedTax",
+            "Revenues",
         ),
         "cost_of_revenue": (
             "CostOfGoodsAndServicesSold",

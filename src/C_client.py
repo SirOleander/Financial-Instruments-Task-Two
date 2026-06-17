@@ -326,17 +326,65 @@ def select_best_fact(
     if valid_duration.empty:
         return df.iloc[0], "selected_no_duration_available_check"
 
+    exact_end = pd.DataFrame()
+
+    if report_date is not None and pd.notna(report_date):
+        report_date = pd.to_datetime(report_date, errors="coerce").normalize()
+
+        exact_end = valid_duration[
+            valid_duration["end"].dt.normalize() == report_date
+        ].copy()
+
+    # For income statement and cash-flow facts, prefer facts that end exactly
+    # on the filing fiscal period end date. This avoids selecting comparative
+    # prior-year quarter facts from the same 10-Q accession.
+    if not exact_end.empty:
+        exact_end = exact_end.sort_values(
+            ["concept_priority", "source_priority", "filed"],
+            ascending=[True, True, False],
+        )
+
+        if form == "10-K":
+            annual = exact_end[
+                exact_end["duration_days"].between(300, 450)
+            ]
+
+            if not annual.empty:
+                return annual.iloc[0], "selected_annual_duration_exact_end_date"
+
+            return (
+                exact_end.sort_values("duration_days", ascending=False).iloc[0],
+                "selected_annual_exact_end_date_duration_fallback_check",
+            )
+
+        if form == "10-Q":
+            quarter = exact_end[
+                exact_end["duration_days"].between(70, 120)
+            ]
+
+            if not quarter.empty:
+                return quarter.iloc[0], "selected_quarter_duration_exact_end_date"
+
+            return (
+                exact_end.sort_values("duration_days", ascending=True).iloc[0],
+                "selected_quarter_exact_end_date_duration_fallback_check",
+            )
+
+        return exact_end.iloc[0], "selected_default_exact_end_date"
+
+    # Fallback only if no fact ends on reportDate.
+    # Keep this visible because these rows need validation.
     if form == "10-K":
         annual = valid_duration[
             valid_duration["duration_days"].between(300, 450)
         ]
 
         if not annual.empty:
-            return annual.iloc[0], "selected_annual_duration_fact"
+            return annual.iloc[0], "selected_annual_duration_without_exact_end_date_check"
 
         return (
             valid_duration.sort_values("duration_days", ascending=False).iloc[0],
-            "selected_longest_duration_annual_fallback_check",
+            "selected_longest_duration_annual_without_exact_end_date_check",
         )
 
     if form == "10-Q":
@@ -345,13 +393,13 @@ def select_best_fact(
         ]
 
         if not quarter.empty:
-            return quarter.iloc[0], "selected_quarter_duration_fact"
+            return quarter.iloc[0], "selected_quarter_duration_without_exact_end_date_check"
 
         shortest = valid_duration.sort_values("duration_days", ascending=True).iloc[0]
 
-        return shortest, "selected_shortest_duration_quarter_fallback_check_ytd"
+        return shortest, "selected_shortest_duration_quarter_without_exact_end_date_check"
 
-    return valid_duration.iloc[0], "selected_default_duration_fact"
+    return valid_duration.iloc[0], "selected_default_duration_without_exact_end_date_check"
 
 def apply_calculated_financial_items(
     ticker: str,
