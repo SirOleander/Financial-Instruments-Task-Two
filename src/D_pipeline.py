@@ -8,7 +8,7 @@ import C_client as sec_client
 # Accounting groups to retrieve in this run. Add groups here (e.g. "TechB")
 # once they have been validated. Every name must exist in config.COMPANY_GROUPS.
 TARGET_GROUPS = (
-    "TechC",
+    "TechD",
 )
 
 

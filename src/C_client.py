@@ -809,12 +809,20 @@ def _parse_ixbrl_facts(html: str) -> pd.DataFrame:
 
     return df
 
-
 def _fact_matches_required_axis_member(
     dimensions: dict[str, str],
-    required_axis_member: dict[str, str] | None,
+    required_axis_member: dict[str, str | tuple[str, ...] | list[str] | set[str]] | None,
 ) -> bool:
-    """Return True if a parsed iXBRL fact matches required axis/member filters."""
+    """Return True if a parsed iXBRL fact matches required axis/member filters.
+
+    Supports either a single required member:
+
+        {"ProductOrServiceAxis": "ProductMember"}
+
+    or several acceptable members:
+
+        {"ProductOrServiceAxis": ("ProductMember", "ProductsMember")}
+    """
     if not required_axis_member:
         return True
 
@@ -824,8 +832,12 @@ def _fact_matches_required_axis_member(
     for required_axis, required_member in required_axis_member.items():
         actual_member = dimensions.get(required_axis)
 
-        if actual_member != required_member:
-            return False
+        if isinstance(required_member, (tuple, list, set)):
+            if actual_member not in required_member:
+                return False
+        else:
+            if actual_member != required_member:
+                return False
 
     return True
 

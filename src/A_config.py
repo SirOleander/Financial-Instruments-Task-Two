@@ -48,8 +48,8 @@ QUARTERLY_FORM_TYPES = ("10-Q",)
 
 # Conservative first retrieval window.
 # We can expand after we validate iXBRL availability and extraction quality.
-ANNUAL_REPORTS_TO_FETCH = 7
-QUARTERLY_REPORTS_TO_FETCH = 20
+ANNUAL_REPORTS_TO_FETCH = 5
+QUARTERLY_REPORTS_TO_FETCH = 15
 
 CURRENT_YEAR = date.today().year
 TARGET_CURRENCY = "USD"
@@ -379,7 +379,6 @@ COMPANY_GROUPS = {
         "AAPL",
         "MSFT",
     ),
-
     "TechB": (
         "AMD",
         "AMAT",
@@ -395,17 +394,16 @@ COMPANY_GROUPS = {
         "PLTR",
         "TXN",
     ),
-
-    # Technology companies with different reporting structures or frequently
-    # missing standardized positions. This is the next validation group.
     "TechC": (
         "ACN",   # No clean gross profit in standard companyfacts form
         "APP",   # No gross profit
-        "IBM",   # No clean operating income; do not calculate generically
-        "INTU",  # No clean COGS / cost of revenue in the usual form
-        "KLAC",  # No gross profit
-        "ORCL",  # ORCL-specific cost-of-revenue components via iXBRL
         "QCOM",  # No gross profit
+    ),
+    "TechD": (
+        "INTU",
+        "IBM",   # No clean operating income; do not calculate generically
+        "KLAC",
+        "ORCL",  # ORCL-specific cost-of-revenue components via iXBRL
     ),
 
 }
@@ -486,6 +484,29 @@ FINANCIAL_POSITIONS_BY_GROUP = {
     },
 
     "TechC": {
+        "income_statement": (
+            "revenue",
+            "cost_of_revenue",
+            "gross_profit",
+            "research_and_development",
+            "operating_income",
+            "income_before_tax",
+            "income_tax",
+            "net_income",
+        ),
+        "balance_sheet": (
+            "cash_and_cash_equivalents",
+            "total_assets",
+            "total_equity",
+            "short_term_debt",
+            "long_term_debt",
+        ),
+        "cash_flow_statement": (
+            "operating_cash_flow",
+            "capital_expenditure",
+        ),
+    },
+"TechD": {
         "income_statement": (
             "revenue",
             "cost_of_revenue",
@@ -616,7 +637,6 @@ FINANCIAL_ITEMS_BY_GROUP = {
             "PaymentsToAcquirePropertyPlantAndEquipment",
         ),
     },
-
     "TechB": {
         "revenue": (
             "Revenues",
@@ -678,8 +698,62 @@ FINANCIAL_ITEMS_BY_GROUP = {
             "PaymentsToAcquireProductiveAssets",
         ),
     },
-
     "TechC": {
+        "revenue": (
+            "RevenueFromContractWithCustomerExcludingAssessedTax",
+            "Revenues",
+        ),
+        "cost_of_revenue": (
+            "CostOfGoodsAndServicesSold",
+            "CostOfRevenue",
+        ),
+        "gross_profit": (
+            "GrossProfit",
+        ),
+        "research_and_development": (
+            "ResearchAndDevelopmentExpense",
+        ),
+        "operating_income": (
+            "OperatingIncomeLoss",
+        ),
+        "income_before_tax": (
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+        ),
+        "income_tax": (
+            "IncomeTaxExpenseBenefit",
+        ),
+        "net_income": (
+            "NetIncomeLoss",
+        ),
+        "cash_and_cash_equivalents": (
+            "CashAndCashEquivalentsAtCarryingValue",
+        ),
+        "total_assets": (
+            "Assets",
+        ),
+        "total_equity": (
+            "StockholdersEquity",
+            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+        ),
+        "short_term_debt": (
+            "DebtCurrent",
+            "LongTermDebtCurrent",
+            "ShortTermBorrowings",
+        ),
+        "long_term_debt": (
+            "LongTermDebtNoncurrent",
+            "LongTermDebt",
+            "LongTermDebtAndCapitalLeaseObligations",
+        ),
+        "operating_cash_flow": (
+            "NetCashProvidedByUsedInOperatingActivities",
+        ),
+        "capital_expenditure": (
+            "PaymentsToAcquirePropertyPlantAndEquipment",
+            "PaymentsToAcquireProductiveAssets",
+        ),
+    },
+    "TechD": {
         "revenue": (
             "RevenueFromContractWithCustomerExcludingAssessedTax",
             "Revenues",
@@ -743,7 +817,7 @@ FINANCIAL_ITEMS_BY_GROUP = {
 # Ticker-specific financial statement overrides
 # =============================================================================
 
-INLINE_FINANCIAL_ITEMS_BY_TICKER = {
+INLINE_FINANCIAL_ITEMS_BY_TICKER = { 
     "AAPL": {
         "commercial_paper": {
             "concepts": (
@@ -755,6 +829,42 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             },
         },
     },
+    "INTU": {
+    "cost_of_product": {
+        "concepts": (
+            "CostOfGoodsAndServicesSold",
+            "CostOfRevenue",
+            "CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization",
+        ),
+        "statement_type": "income_statement",
+        "required_axis_member": {
+            "ProductOrServiceAxis": (
+                "ProductMember",
+                "ProductAndOtherMember",
+            ),
+        },
+    },
+    "cost_of_service": {
+        "concepts": (
+            "CostOfGoodsAndServicesSold",
+            "CostOfRevenue",
+            "CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization",
+        ),
+        "statement_type": "income_statement",
+        "required_axis_member": {
+            "ProductOrServiceAxis": (
+                "ServiceMember",
+                "ServicesMember",
+            ),
+        },
+    },
+    "cost_of_amo": {
+        "concepts": (
+            "CostOfGoodsAndServicesSoldAmortization",
+        ),
+        "statement_type": "income_statement",
+    },
+},
     "LRCX": {
         "cost_of_revenue":{
             "concepts": (
@@ -807,12 +917,19 @@ CALCULATED_FINANCIAL_ITEMS_BY_GROUP = {
             "overwrite_existing": True,
         },
     },
-
-    "TechB": {
-        # Use only the defensible generic TechB calculation. If either revenue
-        # or cost_of_revenue is missing, gross_profit remains missing rather
-        # than being invented. IBM operating_income is deliberately not
-        # calculated generically.
+    "TechC": {
+        "gross_profit": {
+            "concept": "calc_gross_profit",
+            "components": (
+                ("revenue", 1),
+                ("cost_of_revenue", -1),
+            ),
+            "missing_components_as_zero": False,
+            "require_at_least_one_component": False,
+            "overwrite_existing": False,
+        },
+    },
+    "TechD": {
         "gross_profit": {
             "concept": "calc_gross_profit",
             "components": (
@@ -828,6 +945,30 @@ CALCULATED_FINANCIAL_ITEMS_BY_GROUP = {
 
 
 CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
+    "INTU": {
+        "cost_of_revenue": {
+            "concept": "calc_cost_of_revenue",
+            "components": (
+                ("cost_of_service", 1),
+                ("cost_of_product", 1),
+                ("cost_of_amo", 1),
+            ),
+            "missing_components_as_zero": False,
+            "require_at_least_one_component": False,
+            "overwrite_existing": False,
+            "quality": "company_specific_calculation",
+        },
+        "gross_profit": {
+            "concept": "calc_gross_profit",
+            "components": (
+                ("revenue", 1),
+                ("cost_of_revenue", -1),
+            ),
+            "missing_components_as_zero": False,
+            "require_at_least_one_component": False,
+            "overwrite_existing": False,
+        },
+    },
     "ORCL": {
         # ORCL does not report a single cost_of_revenue line. It is rebuilt from
         # company-specific iXBRL component costs. The calculator runs in
