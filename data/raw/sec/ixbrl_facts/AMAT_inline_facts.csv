@@ -1,5 +1,0 @@
-ticker,sector,company_group,position,concept,concept_priority,taxonomy,unit,value,start,end,fy,fp,form,filed,frame,accession_number,label,source,statement_type,duration_days
-AMAT,Technology,TechA,commercial_paper,ShortTermBorrowings,1,us-gaap,USD,200000000.0,,2023-07-30,,,10-Q,2023-08-24,,0000006951-23-000031,,ixbrl,balance_sheet,
-AMAT,Technology,TechA,commercial_paper,ShortTermBorrowings,1,us-gaap,USD,200000000.0,,2023-04-30,,,10-Q,2023-05-26,,0000006951-23-000022,,ixbrl,balance_sheet,
-AMAT,Technology,TechA,commercial_paper,ShortTermBorrowings,1,us-gaap,USD,200000000.0,,2023-01-29,,,10-Q,2023-02-23,,0000006951-23-000012,,ixbrl,balance_sheet,
-AMAT,Technology,TechA,commercial_paper,ShortTermBorrowings,1,us-gaap,USD,200000000.0,,2022-10-30,,,10-K,2022-12-16,,0000006951-22-000043,,ixbrl,balance_sheet,

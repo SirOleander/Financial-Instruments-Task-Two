@@ -1,263 +1,105 @@
-print("DEBUG SCRIPT STARTED", flush=True)
+"""
+Diagnose why IBM inline (iXBRL) items are missing for the 10-K.
 
-import pandas as pd
+Run from your project root (same folder you run D_pipeline.py from), AFTER a
+normal run so the raw filing HTML has been saved to config.SEC_FILINGS_DIR:
+
+    python diagnose_ibm_inline.py
+
+It does NOT hit the network. It only reads the HTML files your pipeline
+already saved, and re-parses them with your own C_client functions so the
+result is faithful to the real pipeline.
+"""
+
+import re
+
+from bs4 import BeautifulSoup
 
 import A_config as config
-import C_client as sec_client
+import C_client as client
 
 
-TICKER = "INTU"
-TARGET_CONCEPT = "CostOfGoodsAndServicesSold"
+TICKER = "IBM"
+CONCEPTS = (
+    "OtherExpenseAndIncome",
+    "SellingGeneralAndAdministrativeExpense",
+    "IntellectualPropertyAndCustomDevelopmentIncome",
+)
+
+# Crude ground-truth counter: how many inline numeric/text fact tags exist in
+# the raw bytes, independent of any HTML parser.
+RAW_FACT_RE = re.compile(r"<ix:non(fraction|numeric)\b", re.IGNORECASE)
+
+
+def count_with_parser(html: str, parser: str) -> int:
+    """Count ix:nonFraction/ix:nonNumeric tags BeautifulSoup actually sees."""
+    soup = BeautifulSoup(html, parser)
+    tags = soup.find_all(
+        lambda tag: tag.name
+        and ("nonfraction" in tag.name.lower() or "nonnumeric" in tag.name.lower())
+        and tag.get("name") is not None
+    )
+    return len(tags)
 
 
 def main() -> None:
-    print("CONFIG FILE:", config.__file__, flush=True)
-    print("CLIENT FILE:", sec_client.__file__, flush=True)
-
-    cik = config.get_cik(TICKER)
-
-    print(f"\nTicker: {TICKER}", flush=True)
-    print(f"CIK: {cik}", flush=True)
-
-    inline_items = config.get_inline_financial_items_for_ticker(TICKER)
-
-    print("\nInline config loaded for INTU:", flush=True)
-    print(inline_items, flush=True)
-
-    if not inline_items:
-        print(
-            "\nSTOP: No INTU inline config found. "
-            "Check INLINE_FINANCIAL_ITEMS_BY_TICKER in A_config.py.",
-            flush=True,
-        )
+    files = sorted(config.SEC_FILINGS_DIR.glob(f"{TICKER}_*"))
+    if not files:
+        print(f"No saved filings found in {config.SEC_FILINGS_DIR} for {TICKER}.")
+        print("Run the pipeline first so fetch_filing_document() saves the HTML.")
         return
 
-    session = sec_client.make_session()
+    for path in files:
+        html = path.read_text(encoding="utf-8", errors="replace")
+        size_mb = len(html) / 1_000_000
 
-    print("\nFetching submissions...", flush=True)
-    submissions = sec_client.fetch_submissions(
-        session=session,
-        ticker=TICKER,
-        cik=cik,
-    )
-
-    filings = sec_client.submissions_to_dataframe(submissions)
-    selected_filings = sec_client.select_target_accessions(filings)
-
-    print(f"\nSelected filings: {len(selected_filings)}", flush=True)
-
-    if selected_filings.empty:
-        print("STOP: No selected 10-K / 10-Q filings.", flush=True)
-        return
-
-    keep_cols = [
-        "accessionNumber",
-        "form",
-        "filingDate",
-        "reportDate",
-        "primaryDocument",
-    ]
-    keep_cols = [col for col in keep_cols if col in selected_filings.columns]
-
-    print("\nSelected filings table:", flush=True)
-    print(selected_filings[keep_cols].to_string(index=False), flush=True)
-
-    print("\nStarting manual iXBRL inspection...", flush=True)
-
-    all_debug_rows = []
-
-    for _, filing in selected_filings.iterrows():
-        accession_number = filing.get("accessionNumber")
-        primary_document = filing.get("primaryDocument")
-        form = filing.get("form")
-        report_date = filing.get("reportDate")
-
-        print("\n" + "=" * 100, flush=True)
-        print(
-            f"Filing: {TICKER} | {form} | accession={accession_number} | "
-            f"reportDate={report_date} | document={primary_document}",
-            flush=True,
-        )
-
-        if not accession_number or not primary_document:
-            print("Skipping: missing accession number or primary document.", flush=True)
-            continue
-
+        raw_hits = len(RAW_FACT_RE.findall(html))
+        html_parser_count = count_with_parser(html, "html.parser")
         try:
-            html = sec_client.fetch_filing_document(
-                session=session,
-                ticker=TICKER,
-                cik=cik,
-                accession_number=accession_number,
-                primary_document=primary_document,
-            )
-        except Exception as exc:
-            print(f"FAILED to fetch filing document: {exc}", flush=True)
+            lxml_count = count_with_parser(html, "lxml")
+        except Exception as exc:  # lxml not installed
+            lxml_count = f"unavailable ({exc})"
+
+        print("=" * 100)
+        print(f"FILE: {path.name}")
+        print(f"  size: {size_mb:.2f} MB")
+        print(f"  raw <ix:nonFraction/nonNumeric> in bytes : {raw_hits}")
+        print(f"  facts seen by html.parser (your pipeline): {html_parser_count}")
+        print(f"  facts seen by lxml                       : {lxml_count}")
+
+        if isinstance(lxml_count, int) and lxml_count > html_parser_count * 1.05:
+            print("  >>> html.parser is seeing far fewer facts than lxml: "
+                  "strong sign of truncation. Switch the parser to 'lxml'.")
+
+        # Re-parse with the pipeline's own function and look for the 3 concepts.
+        facts = client._parse_ixbrl_facts(html)
+        if facts.empty:
+            print("  >>> _parse_ixbrl_facts() returned ZERO facts for this file.")
+            print("      (If raw_hits above is large, the parser dropped them.)")
             continue
 
-        print("Fetched filing HTML.", flush=True)
-
-        try:
-            ixbrl_facts = sec_client._parse_ixbrl_facts(html)
-        except Exception as exc:
-            print(f"FAILED to parse iXBRL facts: {exc}", flush=True)
-            continue
-
-        print(f"Parsed iXBRL facts: {len(ixbrl_facts)}", flush=True)
-
-        if ixbrl_facts.empty:
-            print("No iXBRL facts parsed.", flush=True)
-            continue
-
-        ixbrl_facts["duration_days"] = (
-            ixbrl_facts["end"] - ixbrl_facts["start"]
-        ).dt.days
-
-        concept_debug = ixbrl_facts[
-            ixbrl_facts["concept"].eq(TARGET_CONCEPT)
-        ].copy()
-
-        print(
-            f"Facts with concept {TARGET_CONCEPT}: {len(concept_debug)}",
-            flush=True,
-        )
-
-        if concept_debug.empty:
-            similar = ixbrl_facts[
-                ixbrl_facts["concept"].str.contains(
-                    "Cost|Revenue|Goods|Services",
-                    case=False,
-                    na=False,
-                )
-            ].copy()
-
-            print(
-                "No exact concept found. Similar cost/revenue concepts in filing:",
-                flush=True,
-            )
-
-            if similar.empty:
-                print("No similar concepts found.", flush=True)
-            else:
+        for concept in CONCEPTS:
+            matches = facts[facts["concept"] == concept]
+            print(f"\n  concept '{concept}': {len(matches)} parsed instance(s)")
+            for _, row in matches.iterrows():
+                dims = row.get("dimensions")
+                non_dim = isinstance(dims, dict) and len(dims) == 0
                 print(
-                    similar[
-                        [
-                            "concept",
-                            "value",
-                            "start",
-                            "end",
-                            "duration_days",
-                            "dimensions",
-                            "raw_value",
-                        ]
-                    ].to_string(index=False),
-                    flush=True,
+                    f"    value={row.get('value')!s:>16}  "
+                    f"start={str(row.get('start'))[:10]}  "
+                    f"end={str(row.get('end'))[:10]}  "
+                    f"non_dimensional={non_dim}  dims={dims}"
                 )
 
-            continue
-
-        print("\nAll matching concept facts:", flush=True)
-        print(
-            concept_debug[
-                [
-                    "concept",
-                    "value",
-                    "start",
-                    "end",
-                    "duration_days",
-                    "dimensions",
-                    "raw_value",
-                ]
-            ].to_string(index=False),
-            flush=True,
-        )
-
-        product_service_debug = concept_debug[
-            concept_debug["dimensions"].apply(
-                lambda d: isinstance(d, dict)
-                and any(
-                    axis in d
-                    for axis in (
-                        "ProductOrServiceAxis",
-                        "ProductAndServiceAxis",
-                    )
-                )
-            )
-        ].copy()
-
-        print(
-            "\nMatching concept facts with Product/Service axis:",
-            len(product_service_debug),
-            flush=True,
-        )
-
-        if product_service_debug.empty:
-            print(
-                "No Product/Service-axis facts found for this concept.",
-                flush=True,
-            )
-        else:
-            print(
-                product_service_debug[
-                    [
-                        "concept",
-                        "value",
-                        "start",
-                        "end",
-                        "duration_days",
-                        "dimensions",
-                        "raw_value",
-                    ]
-                ].to_string(index=False),
-                flush=True,
-            )
-
-        for _, row in concept_debug.iterrows():
-            all_debug_rows.append(
-                {
-                    "accession_number": accession_number,
-                    "form": form,
-                    "report_date": report_date,
-                    "primary_document": primary_document,
-                    "concept": row.get("concept"),
-                    "value": row.get("value"),
-                    "start": row.get("start"),
-                    "end": row.get("end"),
-                    "duration_days": row.get("duration_days"),
-                    "dimensions": row.get("dimensions"),
-                    "raw_value": row.get("raw_value"),
-                }
-            )
-
-    print("\n" + "=" * 100, flush=True)
-    print("SUMMARY", flush=True)
-
-    if not all_debug_rows:
-        print(
-            f"No {TARGET_CONCEPT} facts found across selected filings.",
-            flush=True,
-        )
-        return
-
-    summary = pd.DataFrame(all_debug_rows)
-
-    print(
-        summary[
-            [
-                "accession_number",
-                "form",
-                "report_date",
-                "concept",
-                "value",
-                "start",
-                "end",
-                "duration_days",
-                "dimensions",
-                "raw_value",
-            ]
-        ].to_string(index=False),
-        flush=True,
-    )
+    print("=" * 100)
+    print("How to read this:")
+    print("  * raw_hits big but _parse_ixbrl_facts == 0  -> fetch saved a non-XBRL")
+    print("    document, OR the parser failed. Compare html.parser vs lxml counts.")
+    print("  * The 10-K shows 0 parsed instances of the concepts, but the 10-Q")
+    print("    shows them with non_dimensional=True -> the 10-K inline pass is the")
+    print("    problem, not the concept mapping.")
+    print("  * A concept present only with non_dimensional=False on the 10-K means")
+    print("    the non-dimensional filter is dropping it (different fix).")
 
 
 if __name__ == "__main__":
