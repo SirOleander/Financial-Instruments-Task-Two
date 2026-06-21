@@ -95,7 +95,8 @@ COMPANIES = {
     'VZ': '0000732712',
     'WFC': '0000072971',
     'WMT': '0000104169',
-    'XOM': '0000034088'}
+    'XOM': '0000034088'
+}
 
 
 COMPANY_NAMES = {
@@ -171,7 +172,8 @@ COMPANY_NAMES = {
     'VZ': 'Verizon Communications Inc.',
     'WFC': 'Wells Fargo & Company',
     'WMT': 'Walmart Inc.',
-    'XOM': 'Exxon Mobil Corporation'}
+    'XOM': 'Exxon Mobil Corporation'
+}
 
 
 VALID_SECTORS = (
@@ -183,7 +185,8 @@ VALID_SECTORS = (
     'Banks',
     'Financial Services',
     'Industrials',
-    'Energy, Materials & Utilities')
+    'Energy, Materials & Utilities'
+)
 
 
 SECTOR_BY_TICKER = {
@@ -267,51 +270,95 @@ SECTOR_BY_TICKER = {
     'GEV': 'Energy, Materials & Utilities',
     'LIN': 'Energy, Materials & Utilities',
     'NEE': 'Energy, Materials & Utilities',
-    'XOM': 'Energy, Materials & Utilities'}
+    'XOM': 'Energy, Materials & Utilities',
+}
 
-ACTIVE_SECTORS = ('Technology',)
+ACTIVE_SECTORS = (
+    'Healthcare',
+)
 
 ACTIVE_TICKERS = (
-    'AAPL',
-    'ACN',
-    'AMAT',
-    'AMD',
-    'APH',
-    'APP',
-    'AVGO',
-    'CRM',
-    'CSCO',
-    'IBM',
-    'INTC',
-    'INTU',
-    'KLAC',
-    'LRCX',
-    'MSFT',
-    'MU',
-    'NOW',
-    'NVDA',
-    'ORCL',
-    'PLTR',
-    'QCOM',
-    'TXN')
+    'ABBV',
+    'ABT',
+    'AMGN',
+    'ISRG',
+    'JNJ',
+    'LLY',
+    'MRK',
+    'TMO',
+    'UNH',
+)
 
 
-COMPANY_GROUPS = {'TechA': ('AAPL', 'MSFT'),
- 'TechB': ('AMD',
-           'AMAT',
-           'APH',
-           'AVGO',
-           'CRM',
-           'CSCO',
-           'INTC',
-           'LRCX',
-           'MU',
-           'NOW',
-           'NVDA',
-           'PLTR',
-           'TXN'),
- 'TechC': ('ACN', 'APP', 'QCOM'),
- 'TechD': ('INTU', 'IBM', 'KLAC', 'ORCL')}
+COMPANY_GROUPS = {
+    'TechA': (
+        'AAPL', 
+        'MSFT'
+    ),
+    'TechB': (
+        'AMD',
+        'AMAT',
+        'APH',
+        'AVGO',
+        'CRM',
+        'CSCO',
+        'INTC',
+        'LRCX',
+        'MU',
+        'NOW',
+        'NVDA',
+        'PLTR',
+        'TXN'
+    ),
+    'TechC': (
+        'ACN', 
+        'APP', 
+        'QCOM'
+    ),
+    'TechD': (
+        'INTU',
+        'IBM',
+        'KLAC',
+        'ORCL'
+    ),
+    'CommA': (
+        'DIS', 
+        'GOOG', 
+        'GOOGL', 
+        'META',
+        'NFLX',
+        'T',
+        'VZ'
+    ),
+    'DiscA': (
+       'AMZN',
+        'BKNG',
+        'HD',
+        'MCD',
+        'TJX',
+        'TSLA',
+        'UBER',
+    ),
+    'StapA': (
+       'COST',
+        'KO',
+        'PEP',
+        'PG',
+        'PM',
+        'WMT',
+    ),
+    'HealthA': (
+        'ABBV',
+        'ABT',
+        'AMGN',
+        'ISRG',
+        'JNJ',
+        'LLY',
+        'MRK',
+        'TMO',
+        'UNH',
+    ),
+}
 
 
 FINANCIAL_POSITIONS_BY_GROUP = {
@@ -407,6 +454,211 @@ FINANCIAL_POSITIONS_BY_GROUP = {
         'cash_flow_statement': (
             'operating_cash_flow',
             'capital_expenditure',
+        ),
+    },
+    # Add to FINANCIAL_POSITIONS_BY_GROUP — one starter group per remaining sector.
+# Group names use an "A" suffix so you can split a sector later (like TechA–TechD).
+
+    # ---------- Communication ----------
+    'CommA': {
+        'income_statement': (
+            'revenue',
+            'cost_of_revenue',
+            'gross_profit',
+            'research_and_development',     # only for reinvestment_rate = (R&D + capex) / revenue
+            'operating_income',
+            'income_before_tax',
+            'income_tax',
+            'net_income',
+        ),
+        'balance_sheet': (
+            'cash_and_cash_equivalents',
+            'total_assets',
+            'total_equity',
+            'short_term_debt',
+            'long_term_debt',
+        ),
+        'cash_flow_statement': (
+            'operating_cash_flow',
+            'capital_expenditure',
+            # 'content_investment',         # if available – content_or_network_investment_intensity
+        ),
+    },
+
+    # ---------- Consumer Discretionary ----------
+    'DiscA': {
+        'income_statement': (
+            'revenue',
+            'cost_of_revenue',
+            'gross_profit',
+            'research_and_development',
+            'operating_income',
+            'income_before_tax',
+            'income_tax',
+            'net_income',
+        ),
+        'balance_sheet': (
+            'cash_and_cash_equivalents',
+            'total_assets',
+            'total_equity',
+            'short_term_debt',
+            'long_term_debt',
+            'inventory',                    # inventory_turnover
+        ),
+        'cash_flow_statement': (
+            'operating_cash_flow',
+            'capital_expenditure',
+        ),
+    },
+
+    # ---------- Consumer Staples ----------  (identical KPI needs to Discretionary)
+    'StapA': {
+        'income_statement': (
+            'revenue',
+            'cost_of_revenue',
+            'gross_profit',
+            'research_and_development',
+            'operating_income',
+            'income_before_tax',
+            'income_tax',
+            'net_income',
+        ),
+        'balance_sheet': (
+            'cash_and_cash_equivalents',
+            'total_assets',
+            'total_equity',
+            'short_term_debt',
+            'long_term_debt',
+            'inventory',
+        ),
+        'cash_flow_statement': (
+            'operating_cash_flow',
+            'capital_expenditure',
+        ),
+    },
+
+    # ---------- Healthcare ----------  (same shape as the Technology groups)
+    'HealthA': {
+        'income_statement': (
+            'revenue',
+            'cost_of_revenue',
+            'gross_profit',
+            'research_and_development',
+            'operating_income',
+            'income_before_tax',
+            'income_tax',
+            'net_income',
+        ),
+        'balance_sheet': (
+            'cash_and_cash_equivalents',
+            'total_assets',
+            'total_equity',
+            'short_term_debt',
+            'long_term_debt',
+        ),
+        'cash_flow_statement': (
+            'operating_cash_flow',
+            'capital_expenditure',
+        ),
+    },
+
+    # ---------- Industrials ----------  (gross margin + inventory turnover)
+    'IndA': {
+        'income_statement': (
+            'revenue',
+            'cost_of_revenue',
+            'gross_profit',
+            'research_and_development',
+            'operating_income',
+            'income_before_tax',
+            'income_tax',
+            'net_income',
+        ),
+        'balance_sheet': (
+            'cash_and_cash_equivalents',
+            'total_assets',
+            'total_equity',
+            'short_term_debt',
+            'long_term_debt',
+            'inventory',
+        ),
+        'cash_flow_statement': (
+            'operating_cash_flow',
+            'capital_expenditure',
+        ),
+    },
+
+    # ---------- Energy, Materials & Utilities ----------  (no gross_margin / inventory_turnover)
+    'EnergyA': {
+        'income_statement': (
+            'revenue',
+            'research_and_development',      # only for reinvestment_rate
+            'operating_income',
+            'income_before_tax',
+            'income_tax',
+            'net_income',
+        ),
+        'balance_sheet': (
+            'cash_and_cash_equivalents',
+            'total_assets',
+            'total_equity',
+            'short_term_debt',
+            'long_term_debt',
+        ),
+        'cash_flow_statement': (
+            'operating_cash_flow',
+            'capital_expenditure',          # also covers free_cash_flow_after_capex_margin (def. still open)
+        ),
+    },
+
+    # ---------- Financial Services ----------  (non-bank: Visa, Mastercard, BlackRock, ...)
+    'FinA': {
+        'income_statement': (
+            'revenue',
+            'research_and_development',      # reinvestment_rate (often ~0 in this sector)
+            'operating_income',
+            'income_before_tax',
+            'income_tax',
+            'net_income',
+            # 'operating_expenses',          # if available – inverse cost_to_income_ratio
+        ),
+        'balance_sheet': (
+            'cash_and_cash_equivalents',     # needed by net_debt_to_assets
+            'total_assets',
+            'total_equity',
+            'short_term_debt',
+            'long_term_debt',
+        ),
+        'cash_flow_statement': (
+            'operating_cash_flow',
+            'capital_expenditure',
+            # 'acquisitions',                # if available – acquisition_intensity
+        ),
+    },
+
+    # ---------- Banks ----------  (KPIs diverge most; several inputs are "if available")
+    'BankA': {
+        'income_statement': (
+            'revenue',                       # total revenue (net interest income + noninterest income)
+            'net_interest_income',           # if available – net_interest_margin
+            'noninterest_expense',           # efficiency_ratio, noninterest_expense_to_revenue
+            'net_income',
+            'income_before_tax',
+            'income_tax',
+        ),
+        'balance_sheet': (
+            'total_assets',
+            'total_equity',                  # equity_to_assets, assets_to_equity, ROE
+            'total_loans',                   # if available – loan_growth_yoy
+            'total_deposits',                # if available – deposit_growth_yoy
+            'retained_earnings',             # capital_retention
+            # 'allowance_for_credit_losses', # if available – provision_coverage
+            # 'non_performing_loans',        # rarely tagged – provision_coverage
+            # CET1 / Tier 1 ratios are regulatory disclosures, not statement lines
+        ),
+        'cash_flow_statement': (
+            'operating_cash_flow',           # "only if meaningful" for banks
+            # 'dividends_paid',              # alternative basis for capital_retention
         ),
     },
 }
@@ -646,6 +898,274 @@ FINANCIAL_ITEMS_BY_GROUP = {
             'PaymentsToAcquirePropertyPlantAndEquipment',
         ),
     },
+    'CommA': {
+        'revenue': (
+            'Revenues',
+            'RevenueFromContractWithCustomerExcludingAssessedTax',
+        ),
+        'cost_of_revenue': (
+            'CostOfRevenue',
+        ),
+        'gross_profit': (
+            'GrossProfit',
+        ),
+        'research_and_development': (
+            'ResearchAndDevelopmentExpense',
+        ),
+        'operating_income': (
+            'OperatingIncomeLoss',
+        ),
+        'income_before_tax': (
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest',
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments',
+        ),
+        'income_tax': (
+            'IncomeTaxExpenseBenefit',
+        ),
+        'net_income': (
+            'NetIncomeLoss',
+            'ProfitLoss',
+        ),
+        'cash_and_cash_equivalents': (
+            'CashAndCashEquivalentsAtCarryingValue',
+        ),
+        'total_assets': (
+            'Assets',
+        ),
+        'total_equity': (
+            'StockholdersEquity',
+            'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
+        ),
+        'short_term_debt': (
+            'LongTermDebtAndCapitalLeaseObligationsCurrent',
+            'ConvertibleDebtCurrent',
+            'DebtCurrent',
+            'LongTermDebtCurrent',
+            'ShortTermBorrowings',
+            'NotesPayableCurrent',
+        ),
+        'long_term_debt': (
+            'LongTermDebtNoncurrent',
+            'LongTermDebt',
+            'LongTermDebtAndCapitalLeaseObligations',
+            'LongTermNotesAndLoans',
+            'LongTermDebtAndFinanceLeaseObligationsNoncurrent',
+        ),
+        'operating_cash_flow': (
+            'NetCashProvidedByUsedInOperatingActivities',
+            'NetCashProvidedByUsedInOperatingActivitiesContinuingOperations',
+        ),
+        'capital_expenditure': (
+            'PaymentsToAcquirePropertyPlantAndEquipment',
+            'PaymentsToAcquireProductiveAssets',
+            'PaymentsToAcquireOtherProductiveAssets',
+        ),
+    },
+    'DiscA':{
+        'revenue': (
+            'Revenues',
+            'RevenueFromContractWithCustomerExcludingAssessedTax',
+            'RevenueFromContractWithCustomerIncludingAssessedTax',
+        ),
+        'cost_of_revenue': (
+            'CostOfRevenue',
+            "CostOfGoodsAndServicesSold",
+            'CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization',
+        ),
+        'gross_profit': (
+            'GrossProfit',
+        ),
+        'research_and_development': (
+            'ResearchAndDevelopmentExpense',
+        ),
+        'operating_income': (
+            'OperatingIncomeLoss',
+        ),
+        'income_before_tax': (
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest',
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments',
+        ),
+        'income_tax': (
+            'IncomeTaxExpenseBenefit',
+        ),
+        'net_income': (
+            'NetIncomeLoss',
+            'ProfitLoss',
+            "NetIncomeLossAvailableToCommonStockholdersBasic",
+        ),
+        'cash_and_cash_equivalents': (
+            'CashAndCashEquivalentsAtCarryingValue',
+        ),
+        'total_assets': (
+            'Assets',
+        ),
+        'total_equity': (
+            'StockholdersEquity',
+            'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
+        ),
+        'short_term_debt': (
+            'LongTermDebtAndCapitalLeaseObligationsCurrent',
+            'ConvertibleDebtCurrent',
+            'DebtCurrent',
+            'LongTermDebtCurrent',
+            'ShortTermBorrowings',
+            'NotesPayableCurrent',
+        ),
+        'long_term_debt': (
+            'LongTermDebtNoncurrent',
+            'LongTermDebt',
+            'LongTermDebtAndCapitalLeaseObligations',
+            'LongTermNotesAndLoans',
+            'LongTermDebtAndFinanceLeaseObligationsNoncurrent',
+        ),
+        'inventory':(
+            'InventoryNet',
+        ),
+        'operating_cash_flow': (
+            'NetCashProvidedByUsedInOperatingActivities',
+            'NetCashProvidedByUsedInOperatingActivitiesContinuingOperations',
+        ),
+        'capital_expenditure': (
+            'PaymentsToAcquirePropertyPlantAndEquipment',
+            'PaymentsToAcquireProductiveAssets',
+            'PaymentsToAcquireOtherProductiveAssets',
+        ),
+    },
+    'StapA':{
+        'revenue': (
+            'Revenues',
+            'RevenueFromContractWithCustomerExcludingAssessedTax',
+            'RevenueFromContractWithCustomerIncludingAssessedTax',
+        ),
+        'cost_of_revenue': (
+            'CostOfRevenue',
+            "CostOfGoodsAndServicesSold",
+            'CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization',
+        ),
+        'gross_profit': (
+            'GrossProfit',
+        ),
+        'research_and_development': (
+            'ResearchAndDevelopmentExpense',
+        ),
+        'operating_income': (
+            'OperatingIncomeLoss',
+        ),
+        'income_before_tax': (
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest',
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments',
+            'IncomeLossAttributableToParent',
+            'IncomeLossIncludingPortionAttributableToNoncontrollingInterest',
+        ),
+        'income_tax': (
+            'IncomeTaxExpenseBenefit',
+        ),
+        'net_income': (
+            'NetIncomeLoss',
+            'ProfitLoss',
+            "NetIncomeLossAvailableToCommonStockholdersBasic",
+        ),
+        'cash_and_cash_equivalents': (
+            'CashAndCashEquivalentsAtCarryingValue',
+            'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents',
+        ),
+        'total_assets': (
+            'Assets',
+        ),
+        'total_equity': (
+            'StockholdersEquity',
+            'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
+        ),
+        'short_term_debt': (
+            'LongTermDebtAndCapitalLeaseObligationsCurrent',
+            'ConvertibleDebtCurrent',
+            'DebtCurrent',
+            'LongTermDebtCurrent',
+            'ShortTermBorrowings',
+            'NotesPayableCurrent',
+        ),
+        'long_term_debt': (
+            'LongTermDebtNoncurrent',
+            'LongTermDebt',
+            'LongTermDebtAndCapitalLeaseObligations',
+            'LongTermNotesAndLoans',
+            'LongTermDebtAndFinanceLeaseObligationsNoncurrent',
+        ),
+        'inventory':(
+            'InventoryNet',
+        ),
+        'operating_cash_flow': (
+            'NetCashProvidedByUsedInOperatingActivities',
+            'NetCashProvidedByUsedInOperatingActivitiesContinuingOperations',
+        ),
+        'capital_expenditure': (
+            'PaymentsToAcquirePropertyPlantAndEquipment',
+            'PaymentsToAcquireProductiveAssets',
+            'PaymentsToAcquireOtherProductiveAssets',
+        ),
+    },
+    'HealthA': {
+        'revenue': (
+            'Revenues',
+            'RevenueFromContractWithCustomerExcludingAssessedTax',
+            'RevenueFromContractWithCustomerIncludingAssessedTax',
+        ),
+        'cost_of_revenue': (
+            'CostOfRevenue',
+            'CostOfGoodsAndServicesSold',
+            'CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization',
+        ),
+        'gross_profit': (
+            'GrossProfit',
+        ),
+        'research_and_development': (
+            'ResearchAndDevelopmentExpense',
+            'ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost',
+        ),
+        'operating_income': (
+            'OperatingIncomeLoss',
+        ),
+        'income_before_tax': (
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest',
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments',
+        ),
+        'income_tax': (
+            'IncomeTaxExpenseBenefit',
+        ),
+        'net_income': (
+            'NetIncomeLoss',
+            'ProfitLoss',
+        ),
+        'cash_and_cash_equivalents': (
+            'CashAndCashEquivalentsAtCarryingValue',
+            'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents',
+        ),
+        'total_assets': (
+            'Assets',
+        ),
+        'total_equity': (
+            'StockholdersEquity',
+            'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
+        ),
+        'short_term_debt': (
+            'DebtCurrent',
+            'ShortTermBorrowings',
+            'LongTermDebtCurrent',
+            'LongTermDebtAndCapitalLeaseObligationsCurrent',
+        ),
+        'long_term_debt': (
+            'LongTermDebtNoncurrent',
+            'LongTermDebtAndCapitalLeaseObligations',
+            'ConvertibleLongTermNotesPayable',
+        ),
+        'operating_cash_flow': (
+            'NetCashProvidedByUsedInOperatingActivities',
+        ),
+        'capital_expenditure': (
+            'PaymentsToAcquirePropertyPlantAndEquipment',
+            'PaymentsToAcquireProductiveAssets',
+        ),
+    },
 }
 
 
@@ -658,6 +1178,39 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             'statement_type': 'balance_sheet',
             'required_axis_member': {
                 'ShortTermDebtTypeAxis': 'CommercialPaperMember',
+            },
+        },
+    },
+    'AMZN': {
+        'research_and_development': {
+            'concepts': (
+                'TechnologyAndInfrastructureExpense',
+                'TechnologyAndContentExpense',
+            ),
+            'statement_type': 'income_statement',
+        },
+    },
+    'DIS':{
+        'cost_of_product': {
+            'concepts': (
+                'CostOfGoodsAndServicesSold',
+            ),
+            'statement_type': 'income_statement',
+            'required_axis_member': {
+                'ProductOrServiceAxis': (
+                    'ProductMember',
+                ),
+            },
+        },
+        'cost_of_service': {
+            'concepts': (
+                'CostOfGoodsAndServicesSold',
+            ),
+            'statement_type': 'income_statement',
+            'required_axis_member': {
+                'ProductOrServiceAxis': (
+                    'ServiceMember',
+                ),
             },
         },
     },
@@ -716,6 +1269,26 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             'statement_type': 'income_statement',
         },
     },
+    'JNJ': {
+        'selling_general': {
+            'concepts': (
+                'SellingGeneralAndAdministrativeExpense',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'impairment': {
+            'concepts': (
+                'ResearchAndDevelopmentInProcess1',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'restru': {
+            'concepts': (
+                'RestructuringCharges',
+            ),
+            'statement_type': 'income_statement',
+        },
+    },
     'KLAC': {
         'selling_general': {
             'concepts': (
@@ -734,6 +1307,62 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
         'cost_of_revenue': {
             'concepts': (
                 'CostOfGoodsAndServicesSoldExcludingRestructuringCharges',
+            ),
+            'statement_type': 'income_statement',
+        },
+    },
+    'LLY': {
+        'selling_general': {
+            'concepts': (
+                'SellingGeneralAndAdministrativeExpense',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'impairment': {
+            'concepts': (
+                'RestructuringSettlementAndImpairmentProvisions',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'restru': {
+            'concepts': (
+                'ResearchAndDevelopmentAssetAcquiredOtherThanThroughBusinessCombinationWrittenOff',
+            ),
+            'statement_type': 'income_statement',
+        },
+    },
+    "MCD":{
+        'cost_of_revenue': {
+            'concepts': (
+                'Franchisedrestaurantsoccupancyexpenses',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'income_before_tax':{
+            'concepts':(
+                'IncomeLossFromContinuingOperationsBeforeIncomeTaxes',
+            ),
+            'statement_type': 'income_statement',
+        },
+    },
+    'MRK': {
+        'selling_general': {
+            'concepts': (
+                'SellingGeneralAndAdministrativeExpense',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'restru': {
+            'concepts': (
+                'RestructuringCharges',
+            ),
+            'statement_type': 'income_statement',
+        },
+    },
+    'NFLX': {
+        'research_and_development': {
+            'concepts': (
+                'TechnologyandDevelopmentExpense',
             ),
             'statement_type': 'income_statement',
         },
@@ -771,6 +1400,95 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
                 'IncomeLossFromContinuingOperationsIncludingNoncontrollingInterestBeforeIncomeTaxesExtraordinaryItems',
             ),
             'statement_type': 'income_statement',
+        },
+    },
+    'PG': {
+        'income_before_tax': {
+            'concepts': (
+                'IncomeLossFromContinuingOperationsBeforeIncomeTaxes',
+            ),
+            'statement_type': 'income_statement',
+        },
+    },
+    'T':{
+        'cost_of_product': {
+            'concepts': (
+                'CostOfGoodsAndServicesSold',
+            ),
+            'statement_type': 'income_statement',
+            'required_axis_member': {
+                'ProductOrServiceAxis': (
+                    'ProductMember',
+                    'EquipmentMember',
+                ),
+            },
+        },
+        'cost_of_service': {
+            'concepts': (
+                'OtherCostOfOperatingRevenue',
+            ),
+            'statement_type': 'income_statement',
+        },
+    },
+    'TJX':{
+        'operating_income': {
+            'concepts': (
+                'OperatingIncomeLoss',
+            ),
+            'statement_type': 'income_statement',
+            'required_axis_member': {
+                'ConsolidationItemsAxis': (
+                    'OperatingSegmentsMember',
+                ),
+            },
+        },
+    },
+    'TMO':{
+        'cost_of_product': {
+            'concepts': (
+                'CostOfGoodsAndServicesSold',
+            ),
+            'statement_type': 'income_statement',
+            'required_axis_member': {
+                'ProductOrServiceAxis': (
+                    'ProductMember',
+                ),
+            },
+        },
+        'cost_of_service': {
+            'concepts': (
+                'CostOfGoodsAndServicesSold',
+            ),
+            'statement_type': 'income_statement',
+            'required_axis_member': {
+                'ProductOrServiceAxis': (
+                    'ServiceMember',
+                ),
+            },
+        },
+    },
+    'VZ':{
+        'cost_of_product': {
+            'concepts': (
+                'CostOfGoodsAndServicesSold',
+            ),
+            'statement_type': 'income_statement',
+            'required_axis_member': {
+                'ProductOrServiceAxis': (
+                    'ProductMember',
+                ),
+            },
+        },
+        'cost_of_service': {
+            'concepts': (
+                'CostOfGoodsAndServicesSold',
+            ),
+            'statement_type': 'income_statement',
+            'required_axis_member': {
+                'ProductOrServiceAxis': (
+                    'ServiceMember',
+                ),
+            },
         },
     },
 }
@@ -813,10 +1531,71 @@ CALCULATED_FINANCIAL_ITEMS_BY_GROUP = {
             'overwrite_existing': False,
         },
     },
+    'CommA': {
+        'gross_profit': {
+            'concept': 'calc_gross_profit',
+                'components': (
+                    ('revenue',1,),
+                    ('cost_of_revenue',-1,),
+                ),
+            'missing_components_as_zero': False,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+        },
+    },
+    'DiscA': {
+        'gross_profit': {
+            'concept': 'calc_gross_profit',
+                'components': (
+                    ('revenue',1,),
+                    ('cost_of_revenue',-1,),
+                ),
+            'missing_components_as_zero': False,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+        },
+    },
+    'StapA': {
+        'gross_profit': {
+            'concept': 'calc_gross_profit',
+                'components': (
+                    ('revenue',1,),
+                    ('cost_of_revenue',-1,),
+                ),
+            'missing_components_as_zero': False,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+        },
+    },
+    'HealthA': {
+        'gross_profit': {
+            'concept': 'calc_gross_profit',
+                'components': (
+                    ('revenue',1,),
+                    ('cost_of_revenue',-1,),
+                ),
+            'missing_components_as_zero': False,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+        },
+    },
 }
 
 
 CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
+    'DIS': {
+        'cost_of_revenue': {
+            'concept': 'calc_cost_of_revenue',
+                'components': (
+                    ('cost_of_service',1,),
+                    ('cost_of_product',1,),
+                ),
+            'missing_components_as_zero': True,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+            'quality': 'company_specific_calculation',
+        },
+    },
     'IBM': {
         'operating_income': {
             'concept': 'calc_operating_income',
@@ -857,6 +1636,22 @@ CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
             'overwrite_existing': False,
         },
     },
+    'JNJ': {
+        'operating_income': {
+            'concept': 'calc_operating_income',
+                'components': (
+                    ('gross_profit',1,),
+                    ('selling_general',-1,),
+                    ('research_and_development',-1,),
+                    ('impairment',-1,),
+                    ('restru',-1,),
+                ),
+            'missing_components_as_zero': True,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+            'quality': 'company_specific_calculation',
+        },
+    },
     'KLAC': {
         'operating_income': {
             'concept': 'calc_operating_income',
@@ -865,6 +1660,37 @@ CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
                     ('selling_general',-1,),
                     ('research_and_development',-1,),
                     ('impairment',-1,),
+                ),
+            'missing_components_as_zero': True,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+            'quality': 'company_specific_calculation',
+        },
+    },
+    'LLY': {
+        'operating_income': {
+            'concept': 'calc_operating_income',
+                'components': (
+                    ('gross_profit',1,),
+                    ('selling_general',-1,),
+                    ('research_and_development',-1,),
+                    ('impairment',-1,),
+                    ('restru',-1,),
+                ),
+            'missing_components_as_zero': True,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+            'quality': 'company_specific_calculation',
+        },
+    },
+    'MRK': {
+        'operating_income': {
+            'concept': 'calc_operating_income',
+                'components': (
+                    ('gross_profit',1,),
+                    ('selling_general',-1,),
+                    ('research_and_development',-1,),
+                    ('restru',-1,),
                 ),
             'missing_components_as_zero': True,
             'require_at_least_one_component': False,
@@ -894,6 +1720,45 @@ CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
             'missing_components_as_zero': False,
             'require_at_least_one_component': False,
             'overwrite_existing': False,
+        },
+    },
+    'T': {
+        'cost_of_revenue': {
+            'concept': 'calc_cost_of_revenue',
+                'components': (
+                    ('cost_of_service',1,),
+                    ('cost_of_product',1,),
+                ),
+            'missing_components_as_zero': True,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+            'quality': 'company_specific_calculation',
+        },
+    },
+    'TMO': {
+        'cost_of_revenue': {
+            'concept': 'calc_cost_of_revenue',
+                'components': (
+                    ('cost_of_service',1,),
+                    ('cost_of_product',1,),
+                ),
+            'missing_components_as_zero': True,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+            'quality': 'company_specific_calculation',
+        },
+    },
+    'VZ': {
+        'cost_of_revenue': { 
+            'concept': 'calc_cost_of_revenue',
+                'components': (
+                    ('cost_of_service',1,),
+                    ('cost_of_product',1,),
+                ),
+            'missing_components_as_zero': True,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+            'quality': 'company_specific_calculation',
         },
     },
 }
