@@ -10,7 +10,7 @@ import A_config
 import B_database
 import C_client
 
-TARGET_GROUPS = ("HealthA",)
+TARGET_GROUPS = ("FinA",)
 logger = logging.getLogger(__name__)
 
 
