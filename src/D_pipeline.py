@@ -10,7 +10,7 @@ import A_config
 import B_database
 import C_client
 
-TARGET_GROUPS = ("FinA",)
+TARGET_GROUPS = ("BankA",)
 logger = logging.getLogger(__name__)
 
 
@@ -29,63 +29,114 @@ def get_target_tickers() -> list[str]:
     )
 
 
-def _combine_candidate_facts(companyfacts_rows: pd.DataFrame, ixbrl_rows: pd.DataFrame) -> pd.DataFrame:
-    if companyfacts_rows.empty:
-        return ixbrl_rows
-    if ixbrl_rows.empty:
-        return companyfacts_rows
-    return pd.concat([companyfacts_rows, ixbrl_rows], ignore_index=True)
+def _combine_candidate_facts(*frames: pd.DataFrame) -> pd.DataFrame:
+    non_empty_frames = [frame for frame in frames if not frame.empty]
+
+    if not non_empty_frames:
+        return pd.DataFrame()
+
+    return pd.concat(non_empty_frames, ignore_index=True)
 
 
 def process_ticker(session: requests.Session, ticker: str) -> int:
     """Retrieve, standardize, calculate, and store one ticker."""
-    cik = A_config.get_cik(ticker)
-    submissions = C_client.fetch_submissions(session=session, ticker=ticker, cik=cik)
-    filings = C_client.submissions_to_dataframe(submissions)
+    ciks = A_config.get_ciks(ticker)
+
+    filing_frames: list[pd.DataFrame] = []
+
+    for cik in ciks:
+        submissions = C_client.fetch_submissions(
+            session=session,
+            ticker=ticker,
+            cik=cik,
+        )
+        filings = C_client.submissions_to_dataframe(submissions)
+
+        if filings.empty:
+            continue
+
+        filings["filing_cik"] = A_config.cik_10(cik)
+        filing_frames.append(filings)
+
+    if not filing_frames:
+        logger.info("No SEC filings found for %s", ticker)
+        return 0
+
+    filings = (
+        pd.concat(filing_frames, ignore_index=True)
+        .drop_duplicates(subset=["accessionNumber"], keep="first")
+    )
+
     selected_filings = C_client.select_target_accessions(filings)
 
     if selected_filings.empty:
         logger.info("No 10-K / 10-Q filings found for %s", ticker)
         return 0
 
-    companyfacts = C_client.fetch_companyfacts(session=session, ticker=ticker, cik=cik)
-    companyfacts_rows = C_client.extract_candidate_rows_for_ticker(
-        ticker=ticker,
-        companyfacts=companyfacts,
-        selected_filings=selected_filings,
-    )
-    ixbrl_rows = C_client.extract_inline_candidate_rows_for_ticker(
-        session=session,
-        ticker=ticker,
-        cik=cik,
-        selected_filings=selected_filings,
-    )
+    candidate_frames: list[pd.DataFrame] = []
+
+    for cik in ciks:
+        cik_10 = A_config.cik_10(cik)
+        selected_for_cik = selected_filings[
+            selected_filings["filing_cik"] == cik_10
+        ].copy()
+
+        if selected_for_cik.empty:
+            continue
+
+        companyfacts = C_client.fetch_companyfacts(
+            session=session,
+            ticker=ticker,
+            cik=cik_10,
+        )
+
+        companyfacts_rows = C_client.extract_candidate_rows_for_ticker(
+            ticker=ticker,
+            companyfacts=companyfacts,
+            selected_filings=selected_for_cik,
+        )
+        candidate_frames.append(companyfacts_rows)
+
+        ixbrl_rows = C_client.extract_inline_candidate_rows_for_ticker(
+            session=session,
+            ticker=ticker,
+            cik=cik_10,
+            selected_filings=selected_for_cik,
+        )
+        candidate_frames.append(ixbrl_rows)
 
     standardized = C_client.build_standardized_rows(
         ticker=ticker,
         selected_filings=selected_filings,
-        candidate_facts=_combine_candidate_facts(companyfacts_rows, ixbrl_rows),
+        candidate_facts=_combine_candidate_facts(*candidate_frames),
     )
+
     standardized = C_client.apply_calculated_financial_items(
         ticker=ticker,
         standardized=standardized,
     )
 
-    calculated_count = int(standardized["selection_status"].eq("calculated_from_components").sum())
+    calculated_count = int(
+        standardized["selection_status"].eq("calculated_from_components").sum()
+    )
     missing_count = int(standardized["value"].isna().sum())
 
     standardized["value"] = standardized["value"].fillna(0)
+
     rows = standardized.to_dict("records")
     B_database.insert_financial_facts(rows)
 
     logger.info(
-        "%s: %s filings selected, %s rows inserted (%s calculated, %s still missing)",
+        "%s: %s filings selected across %s CIK(s), %s rows inserted "
+        "(%s calculated, %s still missing)",
         ticker,
         len(selected_filings),
+        len(ciks),
         len(rows),
         calculated_count,
         missing_count,
     )
+
     return len(rows)
 
 

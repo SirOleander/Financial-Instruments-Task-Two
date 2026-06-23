@@ -135,9 +135,11 @@ def select_target_accessions(filings: pd.DataFrame) -> pd.DataFrame:
             "reportDate",
             "primaryDocument",
             "acceptanceDateTime",
+            "filing_cik",
         )
         if column in selected.columns
     ]
+
     return selected[keep_columns].copy()
 
 
@@ -441,7 +443,6 @@ def build_standardized_rows(
 
     company_metadata = {
         "ticker": ticker,
-        "cik": A_config.get_cik(ticker),
         "company_name": A_config.get_company_name(ticker),
         "sector": A_config.get_sector(ticker),
         "company_group": A_config.get_company_group(ticker),
@@ -464,6 +465,7 @@ def build_standardized_rows(
 
             row = {
                 **company_metadata,
+                "cik": filing.get("filing_cik") or A_config.get_cik(ticker),
                 "form": form,
                 "accession_number": accession,
                 "report_release_date": filing.get("filingDate"),

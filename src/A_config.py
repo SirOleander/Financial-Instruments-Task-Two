@@ -98,6 +98,11 @@ COMPANIES = {
     'XOM': '0000034088'
 }
 
+ADDITIONAL_CIKS_BY_TICKER = {
+    'BLK': (
+        '0001364742',
+    ),
+}
 
 COMPANY_NAMES = {
     'AAPL': 'Apple Inc.',
@@ -274,15 +279,18 @@ SECTOR_BY_TICKER = {
 }
 
 ACTIVE_SECTORS = (
-    'Financial Services',
+    'Banks',
 )
 
 ACTIVE_TICKERS = (
-    'BLK',
-    'BRK-B',
-    'MA',
-    'SPGI',
-    'V',
+    'AXP',
+    'BAC',
+    'C',
+    'GS',
+    'JPM',
+    'MS',
+    'SCHW',
+    'WFC',
 )
 
 
@@ -375,6 +383,16 @@ COMPANY_GROUPS = {
         'MA',
         'SPGI',
         'V',
+    ),
+    'BankA':(
+        'AXP',
+        'BAC',
+        'C',
+        'GS',
+        'JPM',
+        'MS',
+        'SCHW',
+        'WFC',
     ),
 }
 
@@ -1403,6 +1421,7 @@ FINANCIAL_ITEMS_BY_GROUP = {
         ),
         'income_before_tax':(
             'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest',
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments',
         ),
         'income_tax':(
             'IncomeTaxExpenseBenefit',
@@ -1438,6 +1457,51 @@ FINANCIAL_ITEMS_BY_GROUP = {
         ),
             # 'acquisitions',                # if available – acquisition_intensity
     },
+    'BankA': {
+        'revenue':(
+            'RevenuesNetOfInterestExpense',
+            'Revenues',
+        ),                       # total revenue (net interest income + noninterest income)
+        'net_interest_income':(
+            'InterestIncomeExpenseNet',
+        ),           # if available – net_interest_margin
+        'noninterest_expense':(
+            'NoninterestExpense',
+        ),           # efficiency_ratio, noninterest_expense_to_revenue
+        'net_income':(
+            'NetIncomeLoss',
+        ),
+        'income_before_tax':(
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest',
+        ),
+        'income_tax':(
+            'IncomeTaxExpenseBenefit',
+        ),
+        'total_assets':(
+            'Assets',
+        ),
+        'total_equity':(
+            'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
+            'StockholdersEquity',
+        ),                  # equity_to_assets, assets_to_equity, ROE
+        'total_loans':(
+            'FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss',
+            'NotesReceivableNet',
+        ),                   # if available – loan_growth_yoy
+        'total_deposits':(
+            'Deposits',
+        ),                # if available – deposit_growth_yoy
+        'retained_earnings':(
+            'RetainedEarningsAccumulatedDeficit',
+        ),             # capital_retention
+        # 'allowance_for_credit_losses', # if available – provision_coverage
+        # 'non_performing_loans',        # rarely tagged – provision_coverage
+        # CET1 / Tier 1 ratios are regulatory disclosures, not statement lines
+        'operating_cash_flow':(
+            'NetCashProvidedByUsedInOperatingActivities',
+        ),           # "only if meaningful" for banks
+        # 'dividends_paid',              # alternative basis for capital_retention
+    },
 }
 
 
@@ -1462,6 +1526,35 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             'statement_type': 'income_statement',
         },
     },
+    'AXP': {
+        'card_member_loans': {
+            'concepts': (
+                'NotesReceivableNet',
+            ),
+            'statement_type': 'balance_sheet',
+            'required_axis_member': {
+                'ClassOfFinancingReceivableAxis': 'CardMemberLoansMember',
+            },
+        },
+        'card_member_loans_held_for_sale': {
+            'concepts': (
+                'LoansReceivableHeldForSaleAmount',
+            ),
+            'statement_type': 'balance_sheet',
+            'required_axis_member': {
+                'ClassOfFinancingReceivableAxis': 'CardMemberLoansMember',
+            },
+        },
+        'other_loans': {
+            'concepts': (
+                'NotesReceivableNet',
+            ),
+            'statement_type': 'balance_sheet',
+            'required_axis_member': {
+                'ClassOfFinancingReceivableAxis': 'OtherLoansMember',
+            },
+        },
+    },
     'BRK-B': {
         'cash_and_cash_equivalents': {
             'concepts': (
@@ -1471,6 +1564,30 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             'required_axis_member': {
                 'ProductOrServiceAxis': 'InsuranceAndOtherMember',
             },
+        },
+        'long_term_debt': {
+            'concepts': (
+                'DebtAndCapitalLeaseObligations',
+            ),
+            'statement_type': 'balance_sheet',
+            'required_axis_member': {
+                'ProductOrServiceAxis': 'RailroadUtilitiesAndEnergyMember',
+            },
+        },
+        'short_term_debt': {
+            'concepts': (
+                'DebtAndCapitalLeaseObligations',
+            ),
+            'statement_type': 'balance_sheet',
+            'required_axis_member': {
+                'ProductOrServiceAxis': 'InsuranceAndOtherMember',
+            },
+        },
+        'cost_expenses': {
+            'concepts': (
+                'CostsAndExpenses',
+            ),
+            'statement_type': 'income_statement',
         },
     },
     'CAT':{
@@ -1889,6 +2006,87 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             },
         },
     },
+    'SPGI': {
+        'revenue': {
+            'concepts': (
+                'RevenueFromContractWithCustomerExcludingAssessedTax',
+                'Revenues',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'operating_income': {
+            'concepts': (
+                'OperatingIncomeLoss',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'income_before_tax': {
+            'concepts': (
+                'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest',
+                'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'income_tax': {
+            'concepts': (
+                'IncomeTaxExpenseBenefit',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'net_income': {
+            'concepts': (
+                'NetIncomeLoss',
+                'ProfitLoss',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'cash_and_cash_equivalents': {
+            'concepts': (
+                'CashAndCashEquivalentsAtCarryingValue',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'total_assets': {
+            'concepts': (
+                'Assets',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'total_equity': {
+            'concepts': (
+                'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
+                'StockholdersEquity',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'short_term_debt': {
+            'concepts': (
+                'DebtCurrent',
+                'LongTermDebtCurrent',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'long_term_debt': {
+            'concepts': (
+                'LongTermDebtNoncurrent',
+                'LongTermDebt',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'operating_cash_flow': {
+            'concepts': (
+                'NetCashProvidedByUsedInOperatingActivities',
+            ),
+            'statement_type': 'cash_flow_statement',
+        },
+        'capital_expenditure': {
+            'concepts': (
+                'PaymentsToAcquireProductiveAssets',
+                'PaymentsToAcquirePropertyPlantAndEquipment',
+            ),
+            'statement_type': 'cash_flow_statement',
+        },
+    },
     'T':{
         'cost_of_product': {
             'concepts': (
@@ -1968,6 +2166,14 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
                     'ServiceMember',
                 ),
             },
+        },
+    },
+    'WFC':{
+        'total_loans': {
+            'concepts': (
+                'FinancingReceivableAndNetInvestmentInLeaseExcludingAccruedInterestBeforeAllowanceForCreditLoss',
+            ),
+            'statement_type': 'balance_sheet',
         },
     },
     'XOM':{
@@ -2112,6 +2318,33 @@ CALCULATED_FINANCIAL_ITEMS_BY_GROUP = {
 
 
 CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
+    'AXP': {
+        'total_loans': {
+            'concept': 'calc_total_loans',
+            'components': (
+                ('card_member_loans',1,),
+                ('card_member_loans_held_for_sale',1,),
+                ('other_loans',1,),
+            ),
+            'missing_components_as_zero': True,
+            'require_at_least_one_component': True,
+            'overwrite_existing': True,
+            'quality': 'company_specific_calculation',
+        },
+    },
+    'BRK-B': {
+        'operating_income': {
+            'concept': 'calc_operating_income',
+                'components': (
+                    ('revenue',1,),
+                    ('cost_expenses',-1,),
+                ),
+            'missing_components_as_zero': True,
+            'require_at_least_one_component': False,
+            'overwrite_existing': False,
+            'quality': 'company_specific_calculation',
+        },
+    },
     'CAT': {
         'long_term_debt': {
             'concept': 'calc_long_term_debt',
@@ -2445,6 +2678,15 @@ def get_cik(ticker: str) -> str:
         raise KeyError(f"Ticker is not configured as a US SEC company: {ticker}")
     return cik_10(COMPANIES[ticker])
 
+def get_ciks(ticker: str) -> tuple[str, ...]:
+    """Return all CIKs that should be searched for a ticker.
+
+    The first CIK is the current/main CIK. Additional CIKs are legacy CIKs.
+    """
+    return (
+        get_cik(ticker),
+        *tuple(cik_10(cik) for cik in ADDITIONAL_CIKS_BY_TICKER.get(ticker, ())),
+    )
 
 def get_company_group(ticker: str) -> str:
     if ticker in DUPLICATE_COMPANY_GROUPS:
