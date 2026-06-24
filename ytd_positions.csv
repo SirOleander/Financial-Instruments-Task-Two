@@ -1,0 +1,9 @@
+ticker,position,statement_type,n_quarterly_obs,median_duration,max_duration,classification
+AXP,operating_cash_flow,cash_flow_statement,15,180.0,273.0,YTD (cumulative)
+BAC,operating_cash_flow,cash_flow_statement,15,180.0,273.0,YTD (cumulative)
+C,operating_cash_flow,cash_flow_statement,15,180.0,273.0,YTD (cumulative)
+GS,operating_cash_flow,cash_flow_statement,15,180.0,273.0,YTD (cumulative)
+JPM,operating_cash_flow,cash_flow_statement,15,180.0,273.0,YTD (cumulative)
+MS,operating_cash_flow,cash_flow_statement,15,180.0,273.0,YTD (cumulative)
+SCHW,operating_cash_flow,cash_flow_statement,15,180.0,273.0,YTD (cumulative)
+WFC,operating_cash_flow,cash_flow_statement,15,180.0,273.0,YTD (cumulative)

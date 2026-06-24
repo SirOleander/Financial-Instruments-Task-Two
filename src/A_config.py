@@ -1473,6 +1473,7 @@ FINANCIAL_ITEMS_BY_GROUP = {
         ),
         'income_before_tax':(
             'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest',
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments',
         ),
         'income_tax':(
             'IncomeTaxExpenseBenefit',
@@ -1487,6 +1488,7 @@ FINANCIAL_ITEMS_BY_GROUP = {
         'total_loans':(
             'FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss',
             'NotesReceivableNet',
+            'LoansAndLeasesReceivableNetReportedAmount',
         ),                   # if available – loan_growth_yoy
         'total_deposits':(
             'Deposits',
@@ -1528,30 +1530,24 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
     },
     'AXP': {
         'card_member_loans': {
-            'concepts': (
-                'NotesReceivableNet',
-            ),
+            'concepts': ('NotesReceivableNet',),
             'statement_type': 'balance_sheet',
             'required_axis_member': {
-                'ClassOfFinancingReceivableAxis': 'CardMemberLoansMember',
+                'FinancingReceivableRecordedInvestmentByClassOfFinancingReceivableAxis': ('CardmemberLoansMember', 'CardMemberLoansMember', 'CardBalancesMember')
             },
         },
         'card_member_loans_held_for_sale': {
-            'concepts': (
-                'LoansReceivableHeldForSaleAmount',
-            ),
+            'concepts': ('LoansReceivableHeldForSaleAmount',),
             'statement_type': 'balance_sheet',
             'required_axis_member': {
-                'ClassOfFinancingReceivableAxis': 'CardMemberLoansMember',
+                'FinancingReceivableRecordedInvestmentByClassOfFinancingReceivableAxis': ('CardmemberLoansMember', 'CardMemberLoansMember', 'CardBalancesMember')
             },
         },
         'other_loans': {
-            'concepts': (
-                'NotesReceivableNet',
-            ),
+            'concepts': ('NotesReceivableNet',),
             'statement_type': 'balance_sheet',
             'required_axis_member': {
-                'ClassOfFinancingReceivableAxis': 'OtherLoansMember',
+                'FinancingReceivableRecordedInvestmentByClassOfFinancingReceivableAxis': 'OtherLoansMember',
             },
         },
     },
@@ -1588,6 +1584,80 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
                 'CostsAndExpenses',
             ),
             'statement_type': 'income_statement',
+        },
+    },
+    'C': {
+        'revenue': {
+            'concepts': (
+                'Revenues',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'net_interest_income': {
+            'concepts': (
+                'InterestIncomeExpenseNet',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'noninterest_expense': {
+            'concepts': (
+                'NoninterestIncome',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'net_income': {
+            'concepts': (
+                'NetIncomeLoss',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'income_before_tax': {
+            'concepts': (
+                'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'income_tax': {
+            'concepts': (
+                'IncomeTaxExpenseBenefit',
+            ),
+            'statement_type': 'income_statement',
+        },
+        'total_assets': {
+            'concepts': (
+                'Assets',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'total_equity': {
+            'concepts': (
+                'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'total_loans': {
+            'concepts': (
+                'FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'total_deposits': {
+            'concepts': (
+                'Deposits',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'retained_earnings': {
+            'concepts': (
+                'RetainedEarningsAccumulatedDeficit',
+            ),
+            'statement_type': 'balance_sheet',
+        },
+        'operating_cash_flow': {
+            'concepts': (
+                'NetCashProvidedByUsedInOperatingActivities',
+            ),
+            'statement_type': 'cash_flow_statement',
         },
     },
     'CAT':{
@@ -2345,6 +2415,7 @@ CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
             'quality': 'company_specific_calculation',
         },
     },
+
     'CAT': {
         'long_term_debt': {
             'concept': 'calc_long_term_debt',
