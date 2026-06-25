@@ -48,7 +48,6 @@ COMPANIES = {
     'CVX': '0000093410',
     'DIS': '0001744489',
     'GE': '0000040545',
-    'GEV': '0001996810',
     'GOOG': '0001652044',
     'GOOGL': '0001652044',
     'GS': '0000886982',
@@ -130,7 +129,6 @@ COMPANY_NAMES = {
     'CVX': 'Chevron Corporation',
     'DIS': 'The Walt Disney Company',
     'GE': 'GE Aerospace',
-    'GEV': 'GE Vernova Inc.',
     'GOOG': 'Alphabet Inc. Class C',
     'GOOGL': 'Alphabet Inc. Class A',
     'GS': 'The Goldman Sachs Group, Inc.',
@@ -272,17 +270,88 @@ SECTOR_BY_TICKER = {
     'RTX': 'Industrials',
 
     'CVX': 'Energy, Materials & Utilities',
-    'GEV': 'Energy, Materials & Utilities',
     'LIN': 'Energy, Materials & Utilities',
     'NEE': 'Energy, Materials & Utilities',
     'XOM': 'Energy, Materials & Utilities',
 }
 
 ACTIVE_SECTORS = (
+    'Technology',
+    'Communication',
+    'Consumer Discretionary',
+    'Consumer Staples',
+    'Healthcare',
     'Banks',
+    'Financial Services',
+    'Industrials',
+    'Energy, Materials & Utilities',
 )
 
 ACTIVE_TICKERS = (
+    'AAPL', 
+    'MSFT',
+    'AMD',
+    'AMAT',
+    'APH',
+    'AVGO',
+    'CRM',
+    'CSCO',
+    'INTC',
+    'LRCX',
+    'MU',
+    'NOW',
+    'NVDA',
+    'PLTR',
+    'TXN',
+    'ACN', 
+    'APP', 
+    'QCOM',
+    'INTU',
+    'IBM',
+    'KLAC',
+    'ORCL',
+    'DIS', 
+    'GOOG', 
+    'GOOGL', 
+    'META',
+    'NFLX',
+    'T',
+    'VZ',
+    'AMZN',
+    'BKNG',
+    'HD',
+    'MCD',
+    'TJX',
+    'TSLA',
+    'UBER',
+    'COST',
+    'KO',
+    'PEP',
+    'PG',
+    'PM',
+    'WMT',
+    'ABBV',
+    'ABT',
+    'AMGN',
+    'ISRG',
+    'JNJ',
+    'LLY',
+    'MRK',
+    'TMO',
+    'UNH',
+    'BA',
+    'CAT',
+    'GE',
+    'RTX',
+    'CVX',
+    'LIN',
+    'XOM',
+    'NEE',
+    'BLK',
+    'BRK-B',
+    'MA',
+    'SPGI',
+    'V',
     'AXP',
     'BAC',
     'C',
@@ -370,7 +439,6 @@ COMPANY_GROUPS = {
     ),
     'EnergyA':(
         'CVX',
-        'GEV',
         'LIN',
         'XOM',
     ),
@@ -396,6 +464,25 @@ COMPANY_GROUPS = {
     ),
 }
 
+DECUMULATE_YTD_TICKERS = frozenset({
+    "AXP", 
+    "BAC",
+    "BLK",
+    "BRK-B",
+    "C",
+    "CVX", 
+    "GS", 
+    "JPM",
+    "LIN",
+    "MA", 
+    "MS",
+    "NEE", 
+    "SCHW",
+    "SPGI",
+    "V", 
+    "WFC",
+    "XOM",
+})
 
 FINANCIAL_POSITIONS_BY_GROUP = {
     'TechA': {
@@ -492,8 +579,6 @@ FINANCIAL_POSITIONS_BY_GROUP = {
             'capital_expenditure',
         ),
     },
-    # Add to FINANCIAL_POSITIONS_BY_GROUP — one starter group per remaining sector.
-# Group names use an "A" suffix so you can split a sector later (like TechA–TechD).
 
     # ---------- Communication ----------
     'CommA': {
@@ -501,7 +586,7 @@ FINANCIAL_POSITIONS_BY_GROUP = {
             'revenue',
             'cost_of_revenue',
             'gross_profit',
-            'research_and_development',     # only for reinvestment_rate = (R&D + capex) / revenue
+            'research_and_development',    
             'operating_income',
             'income_before_tax',
             'income_tax',
@@ -521,7 +606,6 @@ FINANCIAL_POSITIONS_BY_GROUP = {
         ),
     },
 
-    # ---------- Consumer Discretionary ----------
     'DiscA': {
         'income_statement': (
             'revenue',
@@ -539,7 +623,7 @@ FINANCIAL_POSITIONS_BY_GROUP = {
             'total_equity',
             'short_term_debt',
             'long_term_debt',
-            'inventory',                    # inventory_turnover
+            'inventory',                    
         ),
         'cash_flow_statement': (
             'operating_cash_flow',
@@ -547,7 +631,6 @@ FINANCIAL_POSITIONS_BY_GROUP = {
         ),
     },
 
-    # ---------- Consumer Staples ----------  (identical KPI needs to Discretionary)
     'StapA': {
         'income_statement': (
             'revenue',
@@ -573,7 +656,6 @@ FINANCIAL_POSITIONS_BY_GROUP = {
         ),
     },
 
-    # ---------- Healthcare ----------  (same shape as the Technology groups)
     'HealthA': {
         'income_statement': (
             'revenue',
@@ -598,7 +680,6 @@ FINANCIAL_POSITIONS_BY_GROUP = {
         ),
     },
 
-    # ---------- Industrials ----------  (gross margin + inventory turnover)
     'IndA': {
         'income_statement': (
             'revenue',
@@ -624,11 +705,10 @@ FINANCIAL_POSITIONS_BY_GROUP = {
         ),
     },
 
-    # ---------- Energy, Materials & Utilities ----------  (no gross_margin / inventory_turnover)
     'EnergyA': {
         'income_statement': (
             'revenue',
-            'research_and_development',      # only for reinvestment_rate
+            'research_and_development',      
             'operating_income',
             'income_before_tax',
             'income_tax',
@@ -643,13 +723,13 @@ FINANCIAL_POSITIONS_BY_GROUP = {
         ),
         'cash_flow_statement': (
             'operating_cash_flow',
-            'capital_expenditure',          # also covers free_cash_flow_after_capex_margin (def. still open)
+            'capital_expenditure',          
         ),
     },
     'EnergyB': {
         'income_statement': (
             'revenue',
-            'research_and_development',      # only for reinvestment_rate
+            'research_and_development',      
             'operating_income',
             'income_before_tax',
             'income_tax',
@@ -664,11 +744,10 @@ FINANCIAL_POSITIONS_BY_GROUP = {
         ),
         'cash_flow_statement': (
             'operating_cash_flow',
-            'capital_expenditure',          # also covers free_cash_flow_after_capex_margin (def. still open)
+            'capital_expenditure',          
         ),
     },
 
-    # ---------- Financial Services ----------  (non-bank: Visa, Mastercard, BlackRock, ...)
     'FinA': {
         'income_statement': (
             'revenue',
@@ -692,29 +771,25 @@ FINANCIAL_POSITIONS_BY_GROUP = {
         ),
     },
 
-    # ---------- Banks ----------  (KPIs diverge most; several inputs are "if available")
     'BankA': {
         'income_statement': (
-            'revenue',                       # total revenue (net interest income + noninterest income)
-            'net_interest_income',           # if available – net_interest_margin
-            'noninterest_expense',           # efficiency_ratio, noninterest_expense_to_revenue
+            'revenue',                       
+            'net_interest_income',          
+            'noninterest_expense',           
             'net_income',
             'income_before_tax',
             'income_tax',
         ),
         'balance_sheet': (
             'total_assets',
-            'total_equity',                  # equity_to_assets, assets_to_equity, ROE
-            'total_loans',                   # if available – loan_growth_yoy
-            'total_deposits',                # if available – deposit_growth_yoy
-            'retained_earnings',             # capital_retention
-            # 'allowance_for_credit_losses', # if available – provision_coverage
-            # 'non_performing_loans',        # rarely tagged – provision_coverage
-            # CET1 / Tier 1 ratios are regulatory disclosures, not statement lines
+            'total_equity',                  
+            'total_loans',                   
+            'total_deposits',                
+            'retained_earnings',             
+            'allowance_for_credit_losses',
         ),
         'cash_flow_statement': (
-            'operating_cash_flow',           # "only if meaningful" for banks
-            # 'dividends_paid',              # alternative basis for capital_retention
+            'operating_cash_flow',          
         ),
     },
 }
@@ -1461,13 +1536,13 @@ FINANCIAL_ITEMS_BY_GROUP = {
         'revenue':(
             'RevenuesNetOfInterestExpense',
             'Revenues',
-        ),                       # total revenue (net interest income + noninterest income)
+        ),                      
         'net_interest_income':(
             'InterestIncomeExpenseNet',
-        ),           # if available – net_interest_margin
+        ),           
         'noninterest_expense':(
             'NoninterestExpense',
-        ),           # efficiency_ratio, noninterest_expense_to_revenue
+        ),           
         'net_income':(
             'NetIncomeLoss',
         ),
@@ -1484,25 +1559,26 @@ FINANCIAL_ITEMS_BY_GROUP = {
         'total_equity':(
             'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
             'StockholdersEquity',
-        ),                  # equity_to_assets, assets_to_equity, ROE
+        ),                  
         'total_loans':(
             'FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss',
             'NotesReceivableNet',
             'LoansAndLeasesReceivableNetReportedAmount',
-        ),                   # if available – loan_growth_yoy
+        ),                  
         'total_deposits':(
             'Deposits',
-        ),                # if available – deposit_growth_yoy
+        ),                
         'retained_earnings':(
             'RetainedEarningsAccumulatedDeficit',
-        ),             # capital_retention
-        # 'allowance_for_credit_losses', # if available – provision_coverage
-        # 'non_performing_loans',        # rarely tagged – provision_coverage
-        # CET1 / Tier 1 ratios are regulatory disclosures, not statement lines
+        ),            
+        'allowance_for_credit_losses':(
+            'FinancingReceivableAllowanceForCreditLossExcludingAccruedInterest',
+            'FinancingReceivableAllowanceForCreditLosses',
+            'LoansAndLeasesReceivableAllowance',
+        ), 
         'operating_cash_flow':(
             'NetCashProvidedByUsedInOperatingActivities',
-        ),           # "only if meaningful" for banks
-        # 'dividends_paid',              # alternative basis for capital_retention
+        ),
     },
 }
 
@@ -1548,6 +1624,13 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             'statement_type': 'balance_sheet',
             'required_axis_member': {
                 'FinancingReceivableRecordedInvestmentByClassOfFinancingReceivableAxis': 'OtherLoansMember',
+            },
+        },
+        'allowance_for_credit_losses': {
+            'concepts': ('FinancingReceivableAllowanceForCreditLosses',),
+            'statement_type': 'balance_sheet',
+            'required_axis_member': {
+                'FinancingReceivableRecordedInvestmentByClassOfFinancingReceivableAxis': ('CardmemberLoansMember', 'CardMemberLoansMember', 'CardBalancesMember'),
             },
         },
     },
@@ -1601,7 +1684,7 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
         },
         'noninterest_expense': {
             'concepts': (
-                'NoninterestIncome',
+                'NoninterestExpense',
             ),
             'statement_type': 'income_statement',
         },
@@ -1653,6 +1736,13 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             ),
             'statement_type': 'balance_sheet',
         },
+        'allowance_for_credit_losses':{
+            'concepts':(
+                'FinancingReceivableAllowanceForCreditLossExcludingAccruedInterest',
+                'FinancingReceivableAllowanceForCreditLosses',
+            ),
+            'statement_type': 'balance_sheet',
+        }, 
         'operating_cash_flow': {
             'concepts': (
                 'NetCashProvidedByUsedInOperatingActivities',
@@ -2245,6 +2335,12 @@ INLINE_FINANCIAL_ITEMS_BY_TICKER = {
             ),
             'statement_type': 'balance_sheet',
         },
+        'allowance_for_credit_losses': {
+            'concepts': (
+                'FinancingReceivableAndNetInvestmentInLeaseAllowanceForLoanLossesExcludingAccruedInterest',
+            ),
+            'statement_type': 'balance_sheet',
+        },
     },
     'XOM':{
         'cost_of_revenue': {
@@ -2402,19 +2498,6 @@ CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
             'quality': 'company_specific_calculation',
         },
     },
-    'BRK-B': {
-        'operating_income': {
-            'concept': 'calc_operating_income',
-                'components': (
-                    ('revenue',1,),
-                    ('cost_expenses',-1,),
-                ),
-            'missing_components_as_zero': True,
-            'require_at_least_one_component': False,
-            'overwrite_existing': False,
-            'quality': 'company_specific_calculation',
-        },
-    },
 
     'CAT': {
         'long_term_debt': {
@@ -2477,21 +2560,6 @@ CALCULATED_FINANCIAL_ITEMS_BY_TICKER = {
                 'components': (
                     ('cost_of_service',1,),
                     ('cost_of_product',1,),
-                ),
-            'missing_components_as_zero': True,
-            'require_at_least_one_component': False,
-            'overwrite_existing': False,
-            'quality': 'company_specific_calculation',
-        },
-        'operating_income': {
-            'concept': 'calc_operating_income',
-                'components': (
-                    ('gross_profit',1,),
-                    ('selling_general',-1,),
-                    ('research_and_development',-1,),
-                    ('restru',-1,),
-                    ('insurance',-1,),
-                    ('impairments',-1,),
                 ),
             'missing_components_as_zero': True,
             'require_at_least_one_component': False,

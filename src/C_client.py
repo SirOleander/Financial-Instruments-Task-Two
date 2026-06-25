@@ -101,7 +101,66 @@ def submissions_to_dataframe(submissions: dict[str, Any]) -> pd.DataFrame:
     return filings
 
 
+# ============================================================================
+# PATCH for C_client.py
+#
+# This is NOT the whole file. In your existing C_client.py:
+#   1. ADD the two helper functions below (_infer_fiscal_year_end_month and
+#      _assign_fiscal_year) directly ABOVE the current select_target_accessions.
+#   2. REPLACE your existing select_target_accessions with the version below.
+# Leave everything else in C_client.py exactly as it is.
+#
+# It also expects one optional config value (with a safe fallback if absent):
+#   A_config.FISCAL_YEARS_TO_FETCH   (e.g. 7)  -- number of fiscal years to keep.
+# If you don't add it, it defaults to A_config.ANNUAL_REPORTS_TO_FETCH + 1.
+# ============================================================================
+
+
+def _infer_fiscal_year_end_month(annual_filings: pd.DataFrame) -> int:
+    """Infer the fiscal-year-end month from annual filings' report dates.
+
+    Calendar-year filers (the banks) -> 12. Non-calendar filers (AAPL ~Sep,
+    MSFT ~Jun, NVDA ~Jan) -> their own FYE month. This makes fiscal-year
+    grouping correct for both, instead of using the calendar year, which would
+    split a non-calendar fiscal year across two calendar years. Falls back to
+    12 (calendar) when no annual report dates are available.
+    """
+    if annual_filings.empty or "reportDate" not in annual_filings.columns:
+        return 12
+    months = annual_filings["reportDate"].dropna().dt.month
+    if months.empty:
+        return 12
+    return int(months.mode().iloc[0])
+
+
+def _assign_fiscal_year(report_dates: pd.Series, fiscal_year_end_month: int) -> pd.Series:
+    """Map each period-end date to its reported fiscal year.
+
+    A period ending after the fiscal-year-end month rolls into the next fiscal
+    year, so all four periods of one fiscal cycle share a label and consecutive
+    cycles differ by 1. For a December FYE this reduces to the calendar year.
+    """
+    years = report_dates.dt.year
+    return years.where(report_dates.dt.month <= fiscal_year_end_month, years + 1)
+
+
 def select_target_accessions(filings: pd.DataFrame) -> pd.DataFrame:
+    """Select 10-K / 10-Q filings for the most recent N fiscal years.
+
+    Year-based (not count-based). The oldest retained fiscal year is always
+    COMPLETE, which:
+      - guarantees Q1 is present so YTD de-cumulation always has its baseline
+        (no more orphaned Q2), and
+      - provides a full prior year for YoY features (the oldest year is the
+        buffer/base; exclude it from training at the modelling stage).
+
+    Selection is by reported fiscal year (FYE-aware), so it ends on a clean
+    fiscal-year boundary regardless of where in the calendar 'now' falls, and is
+    correct for both calendar-FY and non-calendar-FY filers. The newest fiscal
+    year may be partially filed (current year in progress) - that is expected.
+
+    N = A_config.FISCAL_YEARS_TO_FETCH (fallback: ANNUAL_REPORTS_TO_FETCH + 1).
+    """
     if filings.empty:
         return filings
 
@@ -109,23 +168,33 @@ def select_target_accessions(filings: pd.DataFrame) -> pd.DataFrame:
         filings["form"].isin(A_config.TARGET_FORM_TYPES)
         & filings["accessionNumber"].notna()
         & filings["filingDate"].notna()
+        & filings["reportDate"].notna()
     ].copy()
 
-    annual = (
+    if target.empty:
+        return target
+
+    fiscal_year_end_month = _infer_fiscal_year_end_month(
         target[target["form"].isin(A_config.ANNUAL_FORM_TYPES)]
-        .sort_values("filingDate", ascending=False)
-        .head(A_config.ANNUAL_REPORTS_TO_FETCH)
     )
-    quarterly = (
-        target[target["form"].isin(A_config.QUARTERLY_FORM_TYPES)]
+    target["fiscal_year"] = _assign_fiscal_year(target["reportDate"], fiscal_year_end_month)
+
+    years_to_fetch = getattr(
+        A_config, "FISCAL_YEARS_TO_FETCH", A_config.ANNUAL_REPORTS_TO_FETCH + 1
+    )
+    available_years = sorted(target["fiscal_year"].dropna().unique())
+    keep_years = set(available_years[-years_to_fetch:])
+
+    selected = target[target["fiscal_year"].isin(keep_years)].copy()
+
+    # One filing per (form, reportDate): if a period was amended/refiled, keep
+    # the most recently filed accession so a period is never duplicated.
+    selected = (
+        selected.sort_values("filingDate", ascending=False)
+        .drop_duplicates(subset=["form", "reportDate"], keep="first")
         .sort_values("filingDate", ascending=False)
-        .head(A_config.QUARTERLY_REPORTS_TO_FETCH)
     )
 
-    selected = pd.concat([annual, quarterly], ignore_index=True).sort_values(
-        "filingDate",
-        ascending=False,
-    )
     keep_columns = [
         column
         for column in (
