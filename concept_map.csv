@@ -470,7 +470,7 @@ HealthA,Healthcare,MRK,cost_of_revenue,income_statement,CostOfGoodsAndServicesSo
 HealthA,Healthcare,TMO,cost_of_revenue,income_statement,(calculated/none),calculated,21,6575000000.0,2026-03-28
 HealthA,Healthcare,UNH,cost_of_revenue,income_statement,CostOfGoodsAndServicesSold,sec_companyfacts,21,12823000000.0,2026-03-31
 HealthA,Healthcare,TMO,cost_of_service,income_statement,CostOfGoodsAndServicesSold,ixbrl_dimensional,21,3314000000.0,2026-03-28
-HealthA,Healthcare,ABBV,gross_profit,income_statement,GrossProfit,calculated,21,10784000000.0,2026-03-31
+HealthA,Healthcare,ABBV,gross_profit,income_statement,(calculated/none),calculated,21,10784000000.0,2026-03-31
 HealthA,Healthcare,ABT,gross_profit,income_statement,(calculated/none),calculated,21,6274000000.0,2026-03-31
 HealthA,Healthcare,AMGN,gross_profit,income_statement,(calculated/none),calculated,21,5874000000.0,2026-03-31
 HealthA,Healthcare,ISRG,gross_profit,income_statement,GrossProfit,sec_companyfacts,21,1830500000.0,2026-03-31
@@ -1038,7 +1038,7 @@ TechD,Technology,ORCL,cost_of_revenue,income_statement,(calculated/none),calcula
 TechD,Technology,INTU,cost_of_service,income_statement,"CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization, CostOfGoodsAndServicesSold",ixbrl_dimensional,23,1317000000.0,2026-04-30
 TechD,Technology,IBM,gross_profit,income_statement,GrossProfit,sec_companyfacts,21,8950000000.0,2026-03-31
 TechD,Technology,INTU,gross_profit,income_statement,(calculated/none),calculated,23,7184000000.0,2026-04-30
-TechD,Technology,KLAC,gross_profit,income_statement,GrossProfit,calculated,23,2087406000.0,2026-03-31
+TechD,Technology,KLAC,gross_profit,income_statement,(calculated/none),calculated,23,2087406000.0,2026-03-31
 TechD,Technology,ORCL,gross_profit,income_statement,(calculated/none),calculated,24,44336000000.0,2026-05-31
 TechD,Technology,ORCL,hardware_cost,income_statement,HardwareExpenses,ixbrl_dimensional,24,868000000.0,2026-05-31
 TechD,Technology,KLAC,impairment,income_statement,AssetImpairmentCharges,ixbrl_dimensional,9,0.0,2026-03-31

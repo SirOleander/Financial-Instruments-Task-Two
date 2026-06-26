@@ -311,6 +311,17 @@ def _sort_candidates(df: pd.DataFrame, columns: list[str], ascending: list[bool]
     return df.sort_values(columns, ascending=ascending)
 
 
+# A 10-K flow value must span roughly a full fiscal year. The annual band is
+# (300, 450). When no in-band fact carries the filing's period-end date we must
+# NOT silently fall back to the longest sub-annual fact: a Q4 (~91d) or 9-month
+# YTD (~273d) value would otherwise be stamped as the year (observed on ABBV /
+# KLAC gross_profit and GE cost_of_revenue). Below this floor we return missing
+# and let the value be computed downstream (e.g. gross_profit = revenue - cost)
+# from the sound full-year rows. 300 excludes single quarters, H1, and 9-month
+# YTD while still admitting genuine 52/53-week annuals.
+ANNUAL_MIN_DAYS = 300
+
+
 def select_best_fact(
     candidates: pd.DataFrame,
     statement_type: str | None,
@@ -381,10 +392,12 @@ def select_best_fact(
             annual = exact_end[exact_end["duration_days"].between(300, 450)]
             if not annual.empty:
                 return annual.iloc[0], "selected_annual_duration_exact_end_date"
-            return (
-                exact_end.sort_values("duration_days", ascending=False).iloc[0],
-                "selected_annual_exact_end_date_duration_fallback_check",
-            )
+            longest = exact_end.sort_values("duration_days", ascending=False).iloc[0]
+            if longest["duration_days"] >= ANNUAL_MIN_DAYS:
+                return longest, "selected_annual_exact_end_date_duration_fallback_check"
+            # Longest available is sub-annual (Q4 / YTD); refuse to stamp it as the
+            # year. Mark missing -> reads as a coverage gap, computed downstream.
+            return None, "missing"
 
         if form == "10-Q":
             quarter = exact_end[exact_end["duration_days"].between(70, 120)]
@@ -401,10 +414,10 @@ def select_best_fact(
         annual = valid_duration[valid_duration["duration_days"].between(300, 450)]
         if not annual.empty:
             return annual.iloc[0], "selected_annual_duration_without_exact_end_date_check"
-        return (
-            valid_duration.sort_values("duration_days", ascending=False).iloc[0],
-            "selected_longest_duration_annual_without_exact_end_date_check",
-        )
+        longest = valid_duration.sort_values("duration_days", ascending=False).iloc[0]
+        if longest["duration_days"] >= ANNUAL_MIN_DAYS:
+            return longest, "selected_longest_duration_annual_without_exact_end_date_check"
+        return None, "missing"
 
     if form == "10-Q":
         quarter = valid_duration[valid_duration["duration_days"].between(70, 120)]
