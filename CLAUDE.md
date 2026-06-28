@@ -2,19 +2,24 @@
 
 Read this fully before doing anything. It is the source of truth for project state,
 conventions, and what has already been decided. Files in `src/` are the ground truth
-for behavior; this file is the ground truth for *intent*.
+for behavior; this file is the ground truth for *intent*. The full assignment-level
+plan (17 steps, all signal formulas, scoring rubric, backtest spec) lives in
+`docs/PROJECT_SPEC.md` — read that before any modelling-phase work; do NOT inline it
+here.
 
 ## What this project is
 
 A university "Financial Instruments" quantitative equity strategy. The pipeline:
 extract financial signals from SEC filings → compute sector-specific KPI scores →
 predict a forward 63-trading-day Sharpe → rank companies long (top 10) / short
-(bottom 10) → backtest. The data work (extraction + validation) is effectively
-closed; the next phase is modelling.
+(bottom 10) → backtest. Two phases:
+  - **Extraction + validation** — effectively CLOSED (this file's main subject).
+  - **Modelling** — the active next phase; see `docs/PROJECT_SPEC.md` and the
+    "Modelling phase" section below.
 
-Universe: 72 tickers across 13 groups, 7 fiscal years fetched, latest period
-~2026-05-31. A clean validator run currently produces ~700 flags, almost all
-pre-adjudicated as benign (see the ledger below).
+Universe: 72 tickers across 13 implementation groups (= 9 economic sectors), 7 fiscal
+years fetched, latest period ~2026-05-31. A clean validator run currently produces
+~700 flags, almost all pre-adjudicated as benign (see the ledger below).
 
 ## Repo layout (modules live in `src/`)
 
@@ -53,6 +58,11 @@ python debug.py         # validate, writes the two CSVs
 1. `main()` is `drop_existing=True` → a full 13-group rebuild every run. Make **all**
    config edits *before* a single rebuild. Confirm `TARGET_GROUPS` still lists all 13
    groups before running.
+   **Finality:** `TARGET_GROUPS` matters *only* at rebuild time, and any group not in
+   it when `D_pipeline.py` runs is dropped from the DB with **no warning and no
+   recovery short of re-fetching**. Never narrow `TARGET_GROUPS` for a "focused" run —
+   a single-group rebuild silently nukes the other 12. To work on one group, rebuild
+   all 13 and filter downstream.
 2. Re-confirm the **AXP `total_loans`** value survives any rebuild (see Adjudications).
    It has been silently wiped by a rebuild before.
 3. Prefer read-only diagnostics before any destructive write. Prefer targeted patches
@@ -86,6 +96,12 @@ position list). It runs for **every** ticker; duration does the gating. A discre
 quarter is ≤ ~98 days even in a 53-week quarter, so genuine single quarters are never
 touched and you cannot double-de-cumulate. Cumulative Q2/Q3 with a missing same-year
 baseline are set to `missing` (these become the baseline-orphan rows below).
+
+**Ordering invariant (do not reorder):** in `process_ticker`, de-cumulation MUST run
+*after* `apply_calculated_financial_items` (so calculated positions are present and get
+de-cumulated too) and *before* the zero-fill of missing values (so baseline orphans
+become `missing` rather than being differenced against a zero). The current call order
+in D_pipeline.py reflects this; a refactor that moves either step breaks it silently.
 
 ## The ABBV/KLAC/GE fix (DONE this session — verified)
 
@@ -146,27 +162,90 @@ magnitude.
   change. Harmless if total_loans only feeds level-based ratios; distorts
   loan_growth_yoy on the live scoring row. Confirm it survives every rebuild.
 
-## What's left (MODELLING stage — not extraction code)
+================================================================================
+## MODELLING PHASE — read docs/PROJECT_SPEC.md first
+================================================================================
 
-1. **Negative book equity** — MCD (−1,286), PM (−9,279), BKNG (−8,724), ABBV (−6,656),
-   all real. Floor the denominator or exclude ROE/equity_ratio for these names at
-   scoring time.
-2. **HealthA / pharma gross margin** — amortization-in-COGS. Either compute
-   gross_profit = revenue − cost consistently for HealthA, or drop gross_margin for
-   HealthA (as already done for Energy/Banks). Note ABBV's old gross_profit FAILs were
-   the selector bug (now fixed), so re-check on clean numbers before deciding.
-3. **Off-calendar fallback names** (ACN/COST/CSCO/INTU/KLAC/LRCX/PG) — eyeball that
-   OCF/capex now read as single quarters post-de-cumulation.
-4. Optional: reclassify baseline-orphan long-duration rows as their own validator
-   category so they stop reading as anomalies.
-5. Optional: add a YoY step-change flag (>~35%) to catch basis breaks like AXP loans
-   that slip under the 50× scale-jump.
+`docs/PROJECT_SPEC.md` is the authoritative 17-step plan (signal formulas, scoring
+rubric, per-sector signal sets, target math, backtest). The notes here are only the
+load-bearing invariants and the gaps between the spec and what the pipeline currently
+produces. When spec and this file disagree on extraction facts, this file wins; on
+modelling design, the spec wins.
 
-Modelling design (already decided): one pooled cross-sectional model (NOT
-per-company); time-based split (never random); uniform minimum-observations floor for
-all names (the rule that dropped GEV must also govern young names PLTR/APP/UBER/NOW);
-buffer year used only as the YoY base, excluded from training; change features =
-current − prior, with each company's first observation dropped.
+### Non-negotiable modelling invariants
+- **Look-ahead control (the cardinal rule):** features may use only information public
+  at the **report RELEASE date**, never the fiscal-period-end date. Targets are
+  computed from t+1 (first trading day AFTER release) over the next 63 trading days on
+  adjusted-close prices.
+- **Target:** `future_63d_sharpe = mean(daily ret t+1..t+63) / std(daily ret) * sqrt(252)`.
+  Simple version assumes risk-free = 0 (state it). Also store 63d return and 63d vol.
+- **Six-sub-score architecture:** every sector is scored on the SAME six sub-scores —
+  profitability, growth, cash_flow, leverage, efficiency, investment — but the KPIs
+  feeding each are sector-specific (full per-sector KPI sets in PROJECT_SPEC.md §2.5).
+  Each sub-score = mean of its oriented, percentile-ranked KPIs; financial_score = mean
+  of the six; `competitive_advantage_score = w*financial_score + (1−w)*strategic_score`
+  (w TBD).
+- **Sector-relative scoring:** rank each KPI cross-sectionally **within sector group AND
+  within the same report period**, to a percentile in [0,1]. **Orient so higher = better
+  BEFORE ranking** — sign-flip every "inverse" KPI (leverage, efficiency_ratio,
+  assets_to_equity, cost_to_income, all std-dev/stability metrics). Strategic 1–5 →
+  (score−1)/4.
+- **Missing-KPI rule (not zero):** if a KPI can't be computed, DROP it and renormalize
+  the sub-score over the remaining KPIs — never feed 0. Since missing values are stored
+  as 0 in the DB, "can't be computed" = `selection_status=='missing'` OR a guarded
+  denominator, NOT a naive `value==0` test.
+- **Change features:** absolute `current − prior` per signal (and per sub-score and
+  score); NO improvement dummies; drop each company's first observation (no prior).
+  Buffer year exists only as the YoY base and is excluded from training.
+- **Split:** time-based only, never random; hold the latest reports as an untouched
+  test set.
+- **Model:** one pooled cross-sectional model over all company-report rows (NOT
+  per-company); keep models simple/explainable; compare levels-only vs levels+changes.
+- **Min-observations floor:** one uniform rule for all names — the same floor that
+  dropped GEV must also govern young names (PLTR/APP/UBER/NOW).
+
+### Sector mapping (13 impl. groups → 9 spec sectors)
+Tech A–D → Technology; CommA → Communication; DiscA → Consumer Discretionary;
+StapA → Consumer Staples; HealthA → Healthcare; BankA → Banks; FinA → Financial
+Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilities.
+
+### Spec-vs-current GAPS — reconcile before building features (don't assume these away)
+1. **Company count:** spec says 98 companies; current universe is 72 tickers. Reconcile
+   (trimmed universe vs original target) — a human call, not a silent fix.
+2. **Report release date:** the spec's timing/look-ahead rules require the filing/
+   acceptance date. `financial_facts` stores period-end (`fact_end_date`), not clearly
+   the release date. VERIFY the pipeline captures filing date (it's in the SEC
+   submissions JSON) before any target construction — this is the highest-risk gap.
+3. **KPIs needing data not yet in `financial_facts`:** noninterest expense & interest
+   income, loans & deposits, CET1/Tier1, provisions/NPLs (banks); inventory (Disc/
+   Staples/Industrials — partly present); acquisitions CF (FinServ); content/network
+   investment (Comm); dividends/retained earnings (capital_retention). Per the spec's
+   missing-KPI rule these can be dropped-and-renormalized, but where a sub-score leans
+   on them (esp. bank leverage/efficiency/investment) they should be retrieved. Don't
+   assume the columns exist.
+4. **Strategic 1–5 scores are a separate, not-yet-built extraction** (LLM-from-report
+   evidence with a confidence level), distinct from the numeric pipeline. The numeric
+   half is done; the strategic half is greenfield.
+5. **Price data** (daily adjusted close) is a separate ingest not in `financial_facts`
+   — needed only for targets/backtest, not features.
+6. **Adding the missing-data KPIs loops back into EXTRACTION.** The spec's "data still
+   to retrieve" (noninterest expense & interest income, loans/deposits, CET1/Tier1,
+   provisions/NPLs, inventory, acquisitions CF, content/network investment, dividends/
+   retained earnings) means new positions in config → a full 13-group rebuild with all
+   the rebuild cautions above. It is NOT a modelling-only change; sequence it as
+   extraction work.
+
+### OPEN DECISIONS — ASK the user, do not invent answers (full text in PROJECT_SPEC.md)
+1. Definition of `free_cash_flow_after_capex_margin` (Energy) — ambiguous; FCF is
+   already OCF − capex.
+2. Confirm "if available" = drop-and-renormalize (vs a fixed proxy), esp. bank capital
+   ratios and content/network intensity.
+3. Bank `cash_flow_score` / `investment_score` are proxies needing explicit definitions
+   before they're computable.
+4. Regression vs classification framing (Sharpe level vs top/bottom quantile) — sets
+   the eval metrics.
+5. Scoring weight `w` in competitive_advantage_score (spec leaves it TBD; not assumed
+   0.5).
 
 ## Working style
 
@@ -178,35 +257,6 @@ Prefer targeted patches over whole-file rewrites.
 
 ---
 
-## CURRENT TASK — re-validate the SEC retrievals
-
-Goal: confirm the companies were retrieved correctly, the same way it was done before.
-"Validated" here means **every flag is accounted for** (on the benign ledger above or
-freshly investigated and explained) and no new/unexpected family appears — not "zero
-flags."
-
-Do this, read-only first:
-
-1. From `src/`, run `python debug.py` against the current `data/financials.db`. (Only
-   run a full `D_pipeline.py` rebuild if the DB is stale or a config/client change
-   requires it — and if you do, heed the rebuild cautions above.)
-2. Summarize `validation_flags.csv` by check × severity. Compare the counts to the
-   expected shape: ~406 net_income REVIEWs, ~117 concept-drift, ~66 duration-band
-   (all 10-Q baseline orphans), ~68 scale-jump FAILs, ~23 frozen, ~14 heavy-fallback,
-   plus the small margin/identity FAILs.
-3. Reconcile every FAIL and REVIEW against the known-benign ledger. **Surface only
-   what does NOT map to a known family** — that's the signal. Expect the lone LRCX
-   restructuring-charge identity break as the one residual.
-4. Confirm the extraction-bug families are clean: zero 10-K duration-band rows, and no
-   ABBV/KLAC gross_profit or ABBV operating-margin FAILs.
-5. Spot-check via `concept_map.csv`: off-calendar names (ACN/COST/CSCO/INTU/KLAC/
-   LRCX/PG) OCF/capex look like single quarters; the fixed positions (ABBV/KLAC
-   gross_profit, GE cost_of_revenue) show `extraction_method = calculated` with sane
-   values; AXP total_loans = 220,259M with card_member_loans = 207,247M.
-6. If a prior `financials.db` snapshot is available, diff the two on key
-   (ticker, accession_number, position), ignoring `id`/`created_at`, and report only
-   rows whose value/selection_status/extraction_method/duration changed.
-
-Report findings concisely: what's clean, what (if anything) is new and needs a human
-call, and whether the retrieval looks correct. Do not "fix" anything on the benign
-ledger.
+One-off jobs (like re-validating the retrievals) live as prompts or slash commands
+under `.claude/commands/` so this file stays durable standing context. See
+`.claude/commands/revalidate.md` for the re-validation routine.
