@@ -34,6 +34,7 @@ FINANCIAL_FACT_COLUMNS = (
     "selection_status",
     "extraction_method",
     "provider",
+    "source",
 )
 
 DEFAULT_ROW_VALUES = {
@@ -42,6 +43,7 @@ DEFAULT_ROW_VALUES = {
     "fiscal_period": None,
     "extraction_method": "sec_companyfacts",
     "provider": "sec",
+    "source": "edgar",
 }
 
 
@@ -121,6 +123,7 @@ def create_tables(drop_existing: bool = False) -> None:
                 selection_status TEXT,
                 extraction_method TEXT NOT NULL DEFAULT 'sec_companyfacts',
                 provider TEXT NOT NULL DEFAULT 'sec',
+                source TEXT NOT NULL DEFAULT 'edgar',
 
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
@@ -144,6 +147,33 @@ def create_tables(drop_existing: bool = False) -> None:
             CREATE INDEX IF NOT EXISTS idx_financial_facts_statement
             ON financial_facts (ticker, statement_type, position)
             """
+        )
+        connection.commit()
+
+
+def migrate_schema() -> None:
+    """Idempotent, backwards-compatible schema additions for multi-source support.
+
+    Adds the `source` column (default 'edgar') to a pre-existing financial_facts
+    table and backfills NULL reporting_currency to 'USD'. Safe to call repeatedly.
+    NEVER drops, rebuilds, or modifies any EDGAR fact value — existing rows only
+    gain the 'edgar'/'USD' defaults so they remain valid. Fresh rebuilds already
+    get `source` from create_tables(); this only patches an already-built DB.
+    """
+    with closing(get_connection()) as connection:
+        cursor = connection.cursor()
+        existing_columns = {
+            row["name"] for row in cursor.execute("PRAGMA table_info(financial_facts)")
+        }
+        if not existing_columns:
+            return  # no table yet; create_tables() will build it with `source`
+        if "source" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE financial_facts ADD COLUMN source TEXT NOT NULL DEFAULT 'edgar'"
+            )
+        cursor.execute(
+            "UPDATE financial_facts SET reporting_currency = 'USD' "
+            "WHERE reporting_currency IS NULL"
         )
         connection.commit()
 
