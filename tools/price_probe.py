@@ -14,16 +14,21 @@ uniform start year).
 
 Writes NOTHING to the DB. Prices use history(auto_adjust=True)['Close'] only.
 
-USAGE (run from inside src/):
-    python price_probe.py
+USAGE (from the repo root):
+    python tools/price_probe.py
 """
 from __future__ import annotations
 
+import sys
 import time
 import warnings
 from contextlib import closing
+from pathlib import Path
 
 import pandas as pd
+
+# this diagnostic lives in tools/; make the flat pipeline modules in src/ importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import B_database
 

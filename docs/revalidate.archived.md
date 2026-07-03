@@ -1,3 +1,11 @@
+> **⚠️ RETIRED — ARCHIVED FOR REFERENCE ONLY.** The 4-layer validator this routine
+> describes (`debug.py` writing `validation_flags.csv` / `concept_map.csv`) has been
+> **retired** now that the extraction/data phase is closed. `src/debug.py` is now
+> `src/verify_release_dates.py` (a release-date verifier only), and the two CSVs no
+> longer exist. This document is kept solely to show how the retired validator worked —
+> it is NOT a live routine. If a future EDGAR rebuild needs re-validation, a validator
+> can be regenerated from the benign-flag ledger + per-name adjudications in CLAUDE.md.
+
 # Re-validate the SEC retrievals
 
 Confirm the companies were retrieved correctly, the same way it was done before.
