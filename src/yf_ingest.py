@@ -134,8 +134,6 @@ UNIVERSE = [
     ("ASML.AS",    "Technology",                    "TechIntl",   TECH),
     ("SAP.DE",     "Technology",                    "TechIntl",   TECH),
     ("SHOP.TO",    "Technology",                    "TechIntl",   TECH),
-    ("0700.HK",    "Communication",                 "CommIntl",   COMM),
-    ("9988.HK",    "Consumer Discretionary",        "DiscIntl",   DISC),
     ("7203.T",     "Consumer Discretionary",        "DiscIntl",   DISC),
     ("6758.T",     "Consumer Discretionary",        "DiscIntl",   DISC),
     ("AZN.L",      "Healthcare",                    "HealthIntl", HEALTH),
