@@ -1,3 +1,11 @@
+"""EDGAR extraction orchestrator (module `D`) — writes the US portion of `financial_facts`.
+
+`main()` rebuilds the whole table (`create_tables(drop_existing=True)`) for the groups in
+`TARGET_GROUPS`, fetching via C_client and standardizing per ticker. Includes YTD-flow
+de-cumulation (FYE-aware; runs AFTER calculated items and BEFORE the zero-fill of missing
+values — an ordering invariant, see CLAUDE.md). DESTRUCTIVE + network: every run drops and
+refetches the table. Reads A_config + C_client; writes `financial_facts` (source='edgar').
+"""
 from __future__ import annotations
 
 import logging

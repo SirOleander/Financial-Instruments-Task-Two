@@ -1,3 +1,11 @@
+"""SQLite persistence layer for the `financial_facts` table (module `B`).
+
+Owns the schema and all read/write helpers: `get_connection()` (uses `sqlite3.Row`),
+`create_tables(drop_existing=...)`, `migrate_schema()`, and `insert_financial_facts()`
+(INSERT OR REPLACE — idempotent). `financial_facts` is long format: one row per
+(ticker, filing, position). Reads/writes `data/financials.db`; used by every module
+that touches the database.
+"""
 from __future__ import annotations
 
 import math

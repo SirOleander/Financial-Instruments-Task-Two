@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- project-specific ---------------------------------------------------------
+# Generated exports (e.g. financials_database_export.xlsx). data/financials.db is
+# intentionally TRACKED (versioned dataset), so it is NOT ignored here.
+outputs/
+
+# LLM API key files — the key is read from the LITELLM_API_KEY env var; never commit it.
+litellm_key.sh
+*_key.sh
+*.key

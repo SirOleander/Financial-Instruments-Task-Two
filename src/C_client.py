@@ -1,3 +1,12 @@
+"""SEC EDGAR fetch + parse client (module `C`; network I/O).
+
+Fetches submissions and companyfacts JSON and, where needed, inline-XBRL/HTML filing
+documents, then selects the best fact per (ticker, period, position) — FYE-aware, with
+the annual-duration floor fix. Key entry points: `make_session()`, `fetch_submissions`,
+`fetch_companyfacts`, `fetch_filing_document`, `select_best_fact`,
+`apply_calculated_financial_items`, `build_standardized_rows`. Returns standardized rows
+to D_pipeline; reads A_config; does not write the database itself.
+"""
 from __future__ import annotations
 
 import logging
@@ -20,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 def make_session() -> requests.Session:
+    """Return a `requests.Session` preconfigured with the SEC-required User-Agent header."""
     session = requests.Session()
     session.headers.update(A_config.SEC_HEADERS)
     return session

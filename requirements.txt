@@ -1,0 +1,11 @@
+# Python 3.11. Dependencies derived from the actual imports across src/ and tools/.
+# Versions are the tested set; loosen/pin as needed.
+pandas>=2.2          # DataFrames throughout (extraction, prices, KPIs, export)
+requests>=2.31       # SEC EDGAR + LiteLLM HTTP calls (C_client, D_pipeline, G_operative)
+beautifulsoup4>=4.12 # SEC iXBRL/HTML filing parsing via html.parser (C_client, G_operative)
+yfinance>=0.2        # non-US fundamentals + daily prices (yf_ingest, price_ingest, tools/)
+openpyxl>=3.1        # Excel export engine for tools/viewdatabase.py
+
+# NOT required (verified against real imports): openai (the operative LLM is called via
+# `requests`, not the OpenAI SDK), lxml (BeautifulSoup uses the stdlib html.parser),
+# numpy (transitive via pandas only). A conda environment.yaml also exists.

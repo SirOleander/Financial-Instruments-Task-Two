@@ -1,3 +1,11 @@
+"""Central configuration for the extraction pipeline (module `A`, loaded first).
+
+Holds the company universe (tickers, CIKs, sectors, `COMPANY_GROUPS`), the us-gaap
+concept maps per group (`FINANCIAL_ITEMS_BY_GROUP`, `INLINE_FINANCIAL_ITEMS_BY_TICKER`,
+`CALCULATED_FINANCIAL_ITEMS`), sign rules, SEC endpoints/headers, and filesystem paths
+(`DATABASE_PATH = BASE_DIR/data/financials.db`). Imported by every pipeline module;
+reads and writes nothing itself.
+"""
 from pathlib import Path
 
 
