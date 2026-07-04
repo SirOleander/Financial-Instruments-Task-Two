@@ -98,6 +98,13 @@ here.
 - HealthA pharma gross margin (ABBV amortization-in-COGS): decide rev−cost consistent
   vs drop gross_margin for HealthA — applies to the non-US pharma (AZN/NOVN/NOVO) too,
   since they rank in the same Healthcare pool.
+- **Winsorize ratio-tail KPIs at modelling time**: ROIC, cash_conversion, and the
+  *_growth_yoy KPIs carry extreme ±1000s outliers from near-zero denominators (invested
+  capital / net income / prior-year base ≈ 0) — clip their tails before training or they
+  dominate the model. (Same rationale as the target-winsorization caution above.)
+- **free_cash_flow is a LEVEL in native currency** (KRW/JPY/EUR trillions for non-US
+  names): use free_cash_flow_MARGIN cross-sectionally, NEVER the raw level. The level is
+  not in any sub-score today; this matters only if it ever becomes a model feature.
 
 ## What this project is
 
@@ -215,6 +222,24 @@ baseline are set to `missing` (these become the baseline-orphan rows below).
 de-cumulated too) and *before* the zero-fill of missing values (so baseline orphans
 become `missing` rather than being differenced against a zero). The current call order
 in D_pipeline.py reflects this; a refactor that moves either step breaks it silently.
+
+**52/53-week drift fix (DONE this session — verified).** Bug: `decumulate_ytd_flows`
+derived the fiscal quarter from the period-end's calendar MONTH
+(`_q = ((month - FYE - 1) % 12)//3 + 1`) and only de-cumulated quarters labelled 2 or 3.
+52/53-week ("4-4-5") filers have quarter-ends that drift across month boundaries year to
+year, so a drifted quarter got the wrong label (e.g. AVGO's August quarter → "Q4") and was
+SKIPPED — its cash-flow-statement YTD `operating_cash_flow`/`capital_expenditure` (270-day)
+was kept as if quarterly, inflating FCF / FCF-margin / OCF-margin / cash_conversion /
+OCF-growth. (Income-statement flows were unaffected — they arrive as discrete 90-day
+quarters, so de-cumulation never needed them.) Footprint: 60 rows across 13 filers (AAPL,
+AMAT, AMD, AVGO, CSCO, DIS, HD, INTC, KO, MU, NVDA, TJX, TMO), OCF+capex only. Fix: replaced
+the month→quarter labelling with **ordering-based de-cumulation** — within each
+(position, fiscal_year), sort by period-end and difference each cumulative row against the
+immediately-preceding YTD row; if an intermediate quarter is absent (gap > QUARTER_MAX_DAYS)
+or there is no baseline, mark `missing`. Drift-proof, and proven byte-identical to the old
+logic for clean calendar filers (JPM). Verified after rebuild: 0 residual YTD-not-decumulated
+OCF/capex rows; AVGO FCF-margin 0.36–0.52 (was 1.07–1.46); release-date fingerprint,
+AXP total_loans, and the ABBV/KLAC/GE annual fix all unchanged.
 
 ## The ABBV/KLAC/GE fix (DONE this session — verified)
 

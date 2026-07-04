@@ -279,41 +279,41 @@ def decumulate_ytd_flows(rows: pd.DataFrame, ticker: str) -> pd.DataFrame:
     # share a label. For a December FYE this is just the calendar year.
     work["_fy"] = end_year.where(end_month <= fiscal_year_end_month, end_year + 1)
 
-    # Fiscal quarter (1..3 for 10-Qs) from months since the fiscal-year start.
-    # Correct for any FYE; for a December FYE it equals the calendar quarter.
-    work["_q"] = ((end_month - fiscal_year_end_month - 1) % 12) // 3 + 1
-
     work["_cum"] = work["duration_days"] > QUARTER_MAX_DAYS
 
     updates: dict = {}   # index -> column updates
     drops: list = []     # indices to mark missing (unfixable)
 
-    # `work` holds ORIGINAL values, so Q3 is computed from the original Q2 YTD,
-    # not from a Q2 that was just de-cumulated.
+    # De-cumulate by ORDERING within (position, fiscal year), not by a month->quarter
+    # label. 52/53-week filers (AAPL/AVGO/CSCO/KO/...) have quarter-ends that drift across
+    # month boundaries, so a fixed month->quarter map mislabels the drifted quarter (e.g.
+    # AVGO's August quarter as "Q4") and the old `for q in (2,3)` loop skipped it, leaving
+    # its YTD cash-flow value un-de-cumulated. Differencing each cumulative row against the
+    # immediately-preceding YTD row in the same fiscal year is drift-proof and reduces to
+    # the same result for clean calendar filers. `work` holds ORIGINAL values, so each Q is
+    # differenced from the original prior YTD, never from a just-de-cumulated one.
     for (_position, _fy), grp in work.groupby(["position", "_fy"]):
-        by_q = {int(r["_q"]): (idx, r) for idx, r in grp.iterrows()}
-        for q in (2, 3):
-            if q not in by_q:
-                continue
-            idx, row = by_q[q]
-            if not bool(row["_cum"]):
-                continue
-            if (q - 1) not in by_q:
-                drops.append(idx)
-                continue
-            _, base = by_q[q - 1]
-            if pd.isna(base["value"]) or pd.isna(row["value"]):
-                drops.append(idx)
-                continue
-            status = str(row["selection_status"])
-            if not status.endswith("+decumulated"):
-                status = f"{status}+decumulated"
-            updates[idx] = {
-                "value": row["value"] - base["value"],
-                "duration_days": int((row["_end"] - base["_end"]).days),
-                "fact_start_date": base["_end"].date().isoformat(),
-                "selection_status": status,
-            }
+        grp = grp.sort_values("_end")
+        prev = None
+        for idx, row in grp.iterrows():
+            if bool(row["_cum"]):
+                if prev is None or pd.isna(prev["value"]) or pd.isna(row["value"]):
+                    drops.append(idx)                  # cumulative with no usable baseline
+                else:
+                    new_dur = int((row["_end"] - prev["_end"]).days)
+                    if new_dur > QUARTER_MAX_DAYS:      # an intermediate quarter is missing
+                        drops.append(idx)              # -> can't isolate one quarter; missing
+                    else:
+                        status = str(row["selection_status"])
+                        if not status.endswith("+decumulated"):
+                            status = f"{status}+decumulated"
+                        updates[idx] = {
+                            "value": row["value"] - prev["value"],
+                            "duration_days": new_dur,
+                            "fact_start_date": prev["_end"].date().isoformat(),
+                            "selection_status": status,
+                        }
+            prev = row
 
     for idx, cols in updates.items():
         for col, val in cols.items():
