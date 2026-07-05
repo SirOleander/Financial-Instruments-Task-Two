@@ -10,6 +10,7 @@ matplotlib>=3.8      # EDA figures written to eda/ (I_eda.py)
 scipy>=1.11          # spearmanr for rank-based model scoring (J_models.py); modelling stats
 scikit-learn>=1.4    # regression roster, Pipeline, TimeSeriesSplit, GridSearchCV (J_models.py)
 xgboost>=2.0         # gradient-boosted regressor in the roster (J_models.py)
+streamlit>=1.40      # read-only research dashboard (dashboard/app.py)
 
 # NOT required (verified against real imports): openai (the operative LLM is called via
 # `requests`, not the OpenAI SDK), lxml (BeautifulSoup uses the stdlib html.parser).

@@ -125,6 +125,12 @@ ENERGY = [p for p in TECH if p not in ("cost_of_revenue", "gross_profit")]
 BANK = ["revenue", "net_interest_income", "net_income", "income_before_tax",
         "income_tax", "total_assets", "total_equity", "retained_earnings",
         "operating_cash_flow", "cash_dividends_paid"]
+STAP = list(DISC)                       # staples: same shape as discretionary (has inventory)
+# Financial Services (insurer, e.g. Allianz): no clean cost/gross; cash-flow (OCF/capex)
+# absent in yfinance -> those KPIs drop-and-renormalize downstream (like banks' efficiency).
+FIN = ["revenue", "operating_income", "income_before_tax", "income_tax", "net_income",
+       "cash_and_cash_equivalents", "total_assets", "total_equity", "total_debt",
+       "operating_cash_flow", "capital_expenditure"]
 
 # (ticker, EDGAR sector string, company_group label, expected positions)
 UNIVERSE = [
@@ -146,7 +152,21 @@ UNIVERSE = [
     ("8306.T",     "Banks",                         "BankIntl",   BANK),
     ("TD.TO",      "Banks",                         "BankIntl",   BANK),
     ("SAN.MC",     "Banks",                         "BankIntl",   BANK),
+    # ---- Task-Two additions: the 7 non-US of the mandated 98 (added additively) ----
+    ("TCEHY",      "Communication",                 "CommIntl",   COMM),
+    ("9988.HK",    "Consumer Discretionary",        "DiscIntl",   DISC),
+    ("RHHBY",      "Healthcare",                    "HealthIntl", HEALTH),
+    ("NESN.SW",    "Consumer Staples",              "StapIntl",   STAP),
+    ("MC.PA",      "Consumer Discretionary",        "DiscIntl",   DISC),
+    ("ALV.DE",     "Financial Services",            "FinIntl",    FIN),
+    ("CBA.AX",     "Banks",                         "BankIntl",   BANK),
 ]
+
+# The 4 blocked names have NO usable report_release_date (yfinance returns none matching
+# their period-ends). They are ingested prediction/ranking-only: fundamentals + prices, but
+# their rows carry report_release_date=NULL, so downstream they get NO target
+# (target_missing=1), train_eligible=0, and must be keyed on fiscal_period_end_date.
+NO_RELEASE_DATE_NAMES = frozenset({"RHHBY", "NESN.SW", "MC.PA", "CBA.AX"})
 
 # release-date matching windows (days after period-end)
 QUARTERLY_MAX_LAG = 120

@@ -1,0 +1,15 @@
+# Streamlit theme — "Signal Desk" quant-research terminal (deliberate, not the default).
+# Read when running `streamlit run dashboard/app.py` from the repo root.
+[theme]
+base = "dark"
+primaryColor = "#2DD4BF"            # teal accent — UI chrome / selected state
+backgroundColor = "#0B0F1A"         # deep navy canvas
+secondaryBackgroundColor = "#111725" # panels / sidebar
+textColor = "#E6EAF2"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
