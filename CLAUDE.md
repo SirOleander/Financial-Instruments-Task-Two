@@ -175,6 +175,36 @@ of existing modelling_data columns (NOT a schema change):
 - **Winsor caps refit train-only at split** (caps in the table were fit on the full
   train-eligible set for EDA/assembly) — already flagged in the modelling-table block.
 
+### MODELLING + BACKTEST RESULT — NEAR-NULL AND ROBUST (src/J_models.py, src/K_backtest.py)
+**The honest finding: report fundamentals show NO reliable, generalizable signal for the
+forward 63-day Sharpe on this universe/period. This is the RESULT, not a bug — do NOT try to
+tune it into a positive one.** It is exactly what market efficiency predicts, and the
+DELIVERABLE is the leak-free end-to-end methodology, not alpha. Preserve this conclusion.
+- **Pipeline (J_models.py):** time split at 2025-03-31 (train+val 1023 rows ≤ split; untouched
+  12-month test 285 rows > split, touched once). TimeSeriesSplit CV (5 folds, purge gap=21) on
+  train+val. ALL preprocessing refit per fold inside a Pipeline (ratio-tail + change
+  winsorization from train-fold caps — NOT the table's full-pop caps; median impute; z-scale
+  for linear/SVR; per-fold target winsor via TransformedTargetRegressor). Roster: Ridge, Lasso,
+  ElasticNet, RandomForest, XGBoost, SVR with modest regularization-focused grids. Selection
+  metric = Spearman (ranking task).
+- **Numbers:** EDA max |Spearman| ~0.075. CV Spearman ∈ [−0.038,+0.011] (std ~0.07–0.10 ≫
+  means) = indistinguishable from zero. Test Spearman ~0 to slightly negative. Top-vs-bottom
+  realized-Sharpe spreads FLIP SIGN across models. Lasso/ElasticNet regularize to the
+  CONSTANT/null model (flagged, excluded from ensemble). Ensemble = best-3 non-degenerate
+  (SVR+RF+XGB); does not beat individuals.
+- **Ablation (the one pre-committed robustness check, `--ablation`):** sub-scores-only vs
+  KPIs-only vs full. Across all 18 cells max |CV Spearman|=0.041, max |test Spearman|=0.092 —
+  no feature family lifts rank-corr above noise. Null is robust to feature choice.
+- **Backtest (K_backtest.py):** ensemble frozen on train+val, walked forward over 4 quarterly
+  rebalances (top-10 long / bottom-10 short, equal weight, ~63d hold, costs 0/5/10bps,
+  internationals included+flagged). Per-rebalance long-short +0.15/−0.05/−0.21/+0.13 (sign-
+  flipping); cumulative LS ≈ −2.1% gross (−3.3% @10bps), ann Sharpe ~0.07, maxDD ~−25%. Both
+  legs rose ~+50% in a bull market (universe +43%); the strategy adds no spread. 4 rebalances
+  ⇒ high-variance, do not over-interpret.
+- Artifacts (dashboard-consumable) in `predictions/`: cv_results, test_metrics,
+  ablation_results, coef_/importance_*, predictions_all89, backtest_periods/holdings/summary,
+  fig_backtest_equity.png, MODEL_SUMMARY.md, BACKTEST_SUMMARY.md.
+
 ### Modelling-stage handling still pending (unchanged from before)
 - Negative book equity (MCD/PM/BKNG/ABBV): exclude ROE/equity_ratio or floor denom.
 - HealthA pharma gross margin (ABBV amortization-in-COGS): decide rev−cost consistent

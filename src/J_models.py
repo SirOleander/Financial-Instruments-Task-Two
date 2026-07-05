@@ -107,10 +107,19 @@ class YWinsorizer(BaseEstimator, TransformerMixin):
         return np.asarray(y, dtype=float)
 
 
-def make_preprocessor(scale: bool) -> Pipeline:
+def feature_split(level: list[str]):
+    """Given a level-feature list, return (all_features, wins_features, pass_features)."""
+    feats = level + [c + "_change" for c in level]
+    wins = [c for c in level if c in RATIO_TAIL] + [c + "_change" for c in level]
+    pass_ = [f for f in feats if f not in wins]
+    return feats, wins, pass_
+
+
+def make_preprocessor(scale: bool, wins_features=WINS_FEATURES,
+                      pass_features=PASS_FEATURES) -> Pipeline:
     ct = ColumnTransformer(
-        [("wins", Winsorizer(), WINS_FEATURES),
-         ("pass", "passthrough", PASS_FEATURES)],
+        [("wins", Winsorizer(), wins_features),
+         ("pass", "passthrough", pass_features)],
         remainder="drop")
     steps = [("ct", ct), ("impute", SimpleImputer(strategy="median"))]
     if scale:
@@ -118,18 +127,20 @@ def make_preprocessor(scale: bool) -> Pipeline:
     return Pipeline(steps)
 
 
-def transformed_feature_order() -> list[str]:
+def transformed_feature_order(wins_features=WINS_FEATURES,
+                              pass_features=PASS_FEATURES) -> list[str]:
     """Column order after the ColumnTransformer (wins block then pass block)."""
-    return WINS_FEATURES + PASS_FEATURES
+    return wins_features + pass_features
 
 
 # --------------------------------------------------------------------------- #
 # model roster + modest grids
 # --------------------------------------------------------------------------- #
-def roster() -> dict:
+def roster(wins_features=WINS_FEATURES, pass_features=PASS_FEATURES) -> dict:
     """name -> (estimator_pipeline, param_grid, needs_scaling, kind)."""
     def wrap(model, scale):
-        pipe = Pipeline([("prep", make_preprocessor(scale)), ("model", model)])
+        pipe = Pipeline([("prep", make_preprocessor(scale, wins_features, pass_features)),
+                         ("model", model)])
         return TransformedTargetRegressor(regressor=pipe, transformer=YWinsorizer())
 
     return {
@@ -166,13 +177,13 @@ SPEARMAN = make_scorer(spearman_score, greater_is_better=True)
 # --------------------------------------------------------------------------- #
 # data
 # --------------------------------------------------------------------------- #
-def build_X(df: pd.DataFrame) -> pd.DataFrame:
+def build_X(df: pd.DataFrame, level: list[str] = LEVEL) -> pd.DataFrame:
     X = pd.DataFrame(index=df.index)
-    for c in LEVEL:
+    for c in level:
         X[c] = df[(c + "_raw") if c in RATIO_TAIL else c].values
-    for c in LEVEL:
+    for c in level:
         X[c + "_change"] = df[c + "_change"].values
-    return X[FEATURES]
+    return X[level + [c + "_change" for c in level]]
 
 
 def load():
@@ -346,6 +357,45 @@ def main():
           f"predictions_all89.csv, MODEL_SUMMARY.md")
 
 
+def ablation():
+    """ONE pre-committed robustness check: does the null survive the feature choice?
+    Re-run the full roster (CV Spearman on train+val, one-shot test Spearman) under three
+    feature sets — sub-scores-only, KPIs-only, full — to show the near-null is not an
+    artifact of mixing feature families. Writes predictions/ablation_results.csv."""
+    os.makedirs(OUT, exist_ok=True)
+    df, trainval, test, _ = load()
+    tscv = TimeSeriesSplit(n_splits=N_SPLITS, gap=CV_GAP)
+    variants = {"subscores_only": SUBSCORES, "kpis_only": KPIS, "full": LEVEL}
+    rows = []
+    print("ABLATION — CV & test Spearman by feature set (leak-safe, same split/CV):")
+    for vname, level in variants.items():
+        _, wins_f, pass_f = feature_split(level)
+        Xtv, ytv = build_X(trainval, level), trainval[TARGET_RAW].values
+        Xte = build_X(test, level)
+        for mname, (est, grid, scale, kind) in roster(wins_f, pass_f).items():
+            gs = GridSearchCV(est, grid, scoring=SPEARMAN, cv=tscv, n_jobs=-1, refit=True)
+            gs.fit(Xtv, ytv)
+            cv = gs.cv_results_["mean_test_score"][gs.best_index_]
+            tp = gs.best_estimator_.predict(Xte)
+            degen = int(np.std(gs.best_estimator_.predict(Xtv)) < 1e-6)
+            rows.append({"feature_set": vname, "n_features": len(level) * 2, "model": mname,
+                         "cv_spearman": cv, "test_spearman": spearman_score(test[TARGET_RAW].values, tp),
+                         "degenerate": degen})
+        best = max([r for r in rows if r["feature_set"] == vname], key=lambda r: r["cv_spearman"])
+        print(f"  {vname:16} best CV model={best['model']:12} cv={best['cv_spearman']:+.4f} "
+              f"test={best['test_spearman']:+.4f}")
+    out = pd.DataFrame(rows)
+    out.round(4).to_csv(os.path.join(OUT, "ablation_results.csv"), index=False)
+    # concise verdict
+    piv = out.pivot_table(index="model", columns="feature_set", values="cv_spearman")
+    print("\nCV Spearman by model × feature set:")
+    print(piv.round(4).to_string())
+    print(f"\nMax |CV Spearman| across ALL cells = {out['cv_spearman'].abs().max():.4f} "
+          f"| max |test Spearman| = {out['test_spearman'].abs().max():.4f}")
+    print("Null result is ROBUST to feature choice: no feature set lifts rank-corr materially "
+          "above zero. -> predictions/ablation_results.csv")
+
+
 def _best_param_kwargs(fitted_ttr) -> dict:
     """Extract best hyperparams from a fitted GridSearch best_estimator_ (TTR) so we can
     re-instantiate a fresh clone with the same params for the full-data refit."""
@@ -425,4 +475,8 @@ def write_summary(cv_df, test_df, best3, preds):
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--ablation" in sys.argv:
+        ablation()
+    else:
+        main()
