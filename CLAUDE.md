@@ -93,6 +93,41 @@ here.
 7. Resolve the OPEN DECISIONS in PROJECT_SPEC (regression vs classification; the
    competitive_advantage weight w; free_cash_flow_after_capex_margin definition).
 
+### MODELLING TABLE — BUILT (src/H_modelling.py → table `modelling_data`, 1662 rows/89 tickers)
+Additive-only (six source tables proven UNCHANGED). One row per (ticker,
+report_release_date); features joined to target STRICTLY on that key (spine = `scores`,
+whose key set is proven identical to `target_63d`). `python H_modelling.py` = STEP-1
+dry-run/report; `--write --floor=6` = build. Idempotent (INSERT OR REPLACE on the PK).
+Settled decisions baked in:
+- **Regression** on `future_63d_sharpe` (no classification labels).
+- `financial_score` and `operative_score` are SEPARATE features (model learns their
+  weight). `competitive_advantage_score_w050` = 0.5·fin + 0.5·op is a REPORTING column
+  ONLY (falls back to financial_score where operative missing) — NOT a model feature.
+- **Operative join = look-ahead-safe.** US names: exact same-date match. The 8
+  conventional internationals (TSM/SAP/7203.T/6758.T/AZN/NOVN/NOVO/8306.T): as-of match to
+  the most recent 20-F operative filed ON OR BEFORE the report release date (their yfinance
+  scoring dates never coincide with the 20-F filing date; strict same-date would orphan all
+  56 recovered rows). Integrated 20-F (ASML/SHEL/SAN, status=missing) and no-20-F names
+  stay NULL + `operative_missing=1`. Coverage: 1496 exact / 56 asof_20f / 110 NULL.
+  Provenance stored per row: `operative_match`, `operative_asof_date`.
+- **Change features = same-FREQUENCY prior** (annual diffs prior annual, quarterly prior
+  quarterly) because financial_score is a WITHIN-frequency percentile — cross-freq diffs
+  would mix ranking populations. `first_obs=1` = no same-freq prior (178 rows = 2×89);
+  their change features are NULL.
+- **Winsorization** of ratio-tails (ROIC, cash_conversion, *_growth_yoy) and target
+  (future_63d_sharpe) at 1st/99th pct; BOTH `_raw` and clipped columns kept.
+- **`train_eligible` flag = the min-obs floor, applied as RETAIN-NOT-DELETE.** Floor=6
+  train-usable rows (target AND same-freq change) per company. **71 US names qualify →
+  1308 train_eligible rows.** The **18 internationals are RETAINED** in modelling_data
+  (all rows `train_eligible=0`, 141 rows) so the trained model can still SCORE them for the
+  final ranking — held out of TRAINING only, because their 4–5-row histories are too thin
+  and structurally annual-only. 354 rows total are train_eligible=0 (internationals +
+  every first_obs / target_missing US row). All 89 companies remain in the table.
+- **CAVEAT — winsor caps refit at split (leakage).** Caps are currently fit on the FULL
+  population. At the time-based train/test split they MUST be refit on the TRAINING rows
+  ONLY (train_eligible=1, pre-split) and re-applied — otherwise the test set leaks into the
+  caps. This is the NEXT step's responsibility, not done here.
+
 ### Modelling-stage handling still pending (unchanged from before)
 - Negative book equity (MCD/PM/BKNG/ABBV): exclude ROE/equity_ratio or floor denom.
 - HealthA pharma gross margin (ABBV amortization-in-COGS): decide rev−cost consistent
