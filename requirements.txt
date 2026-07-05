@@ -5,7 +5,11 @@ requests>=2.31       # SEC EDGAR + LiteLLM HTTP calls (C_client, D_pipeline, G_o
 beautifulsoup4>=4.12 # SEC iXBRL/HTML filing parsing via html.parser (C_client, G_operative)
 yfinance>=0.2        # non-US fundamentals + daily prices (yf_ingest, price_ingest, tools/)
 openpyxl>=3.1        # Excel export engine for tools/viewdatabase.py
+numpy>=1.26          # direct import in H_modelling.py / I_eda.py (feature assembly, VIF, winsor)
+matplotlib>=3.8      # EDA figures written to eda/ (I_eda.py)
+scipy>=1.11          # modelling-stage stats (installed for EDA/modelling; not yet imported directly)
 
 # NOT required (verified against real imports): openai (the operative LLM is called via
-# `requests`, not the OpenAI SDK), lxml (BeautifulSoup uses the stdlib html.parser),
-# numpy (transitive via pandas only). A conda environment.yaml also exists.
+# `requests`, not the OpenAI SDK), lxml (BeautifulSoup uses the stdlib html.parser).
+# numpy was previously transitive via pandas; it is now a DIRECT import (modelling/EDA),
+# hence pinned above. A conda environment.yaml also exists.

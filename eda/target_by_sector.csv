@@ -1,0 +1,10 @@
+sector,count,mean,median,std
+Banks,144,1.1179,1.2701,2.0044
+Communication,110,0.6062,0.4683,2.0085
+Consumer Discretionary,126,0.8524,0.6977,1.9944
+Consumer Staples,112,0.8216,0.7093,1.8776
+"Energy, Materials & Utilities",72,0.7531,0.416,1.6741
+Financial Services,91,0.6988,0.3078,1.8537
+Healthcare,163,0.5044,0.3161,1.9551
+Industrials,72,1.0856,0.6105,2.2525
+Technology,418,0.8873,0.9504,1.9941

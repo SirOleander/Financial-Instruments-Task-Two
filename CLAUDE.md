@@ -128,6 +128,53 @@ Settled decisions baked in:
   ONLY (train_eligible=1, pre-split) and re-applied — otherwise the test set leaks into the
   caps. This is the NEXT step's responsibility, not done here.
 
+### FEATURE SET — DECIDED post-EDA (src/I_eda.py, artifacts in eda/, readout eda/EDA_SUMMARY.md)
+EDA ran on TRAIN-ELIGIBLE rows only (n=1308 / 71 US names). It is READ-ONLY (writes only
+`eda/` figures+CSVs, dashboard-consumable; a later Streamlit app consumes them). Signal is
+weak by nature: max |Spearman| among well-populated (n≥800) features vs future_63d_sharpe is
+~0.075 (net_margin_change) — this is a MULTIVARIATE/ensemble problem, not a single-feature
+one. `python I_eda.py` regenerates all artifacts. The feature choices below are a SELECTION
+of existing modelling_data columns (NOT a schema change):
+
+**USE as model features:**
+- **The six sub-scores** (profitability/growth/cash_flow/leverage/efficiency/investment) —
+  NOT financial_score.
+- **operative_score** (kept separate; model learns fin-vs-operative weight).
+- **De-duplicated KPIs (17, broadly populated):** gross_margin, operating_margin,
+  return_on_assets, return_on_equity, revenue_growth_yoy, operating_income_growth_yoy,
+  net_income_growth_yoy, operating_cash_flow_growth_yoy, operating_cash_flow_margin,
+  cash_conversion, debt_to_assets, cash_to_assets, equity_ratio, asset_turnover,
+  capex_intensity, r_and_d_intensity, ROIC.
+- **The *_change** of each retained sub-score/operative/KPI (same-frequency change; already
+  in the table). Change features carry as much of the (thin) signal as levels.
+- **Sector-specific, only where computable:** inventory_turnover (Disc/Staples/Ind).
+
+**DROP as model features (columns stay in the table, just unused):**
+- `financial_score` and `competitive_advantage_score_w050` — the latter stays a REPORTING
+  column only.
+- **5 exact by-construction identities** (VIF=inf; drop the derived one): financial_score =
+  mean(6 sub-scores); cas_w050 = 0.5·fin+0.5·op; free_cash_flow_margin =
+  operating_cash_flow_margin − capex_intensity; net_debt_to_assets = debt_to_assets −
+  cash_to_assets; reinvestment_rate = r_and_d_intensity + capex_intensity. (All verified to
+  machine-epsilon residual.)
+- **>0.8 redundant pairs (drop one):** operating_income_to_assets (~0.96 with ROA →
+  keep ROA); net_margin (~0.90 with operating_margin → keep operating_margin).
+- **Unreliable sparse bank-only KPIs — RETAINED but NOT primary features:**
+  net_interest_margin (n=144), capital_retention (n=32). Their large raw target correlations
+  are small-subsample artifacts, not deployable signal.
+
+**Cautions for modelling:**
+- **Sub-score/KPI overlap:** the six sub-scores ARE percentile aggregations of these KPIs, so
+  the sub-score block and KPI block structurally overlap. Prefer regularized (ridge/lasso) or
+  tree models, and/or run a sub-scores-only vs KPIs-only ablation; do NOT read linear
+  coefficients naively.
+- **Sector is NOT a predictive feature.** Forward-Sharpe medians differ IN-SAMPLE across
+  sectors (Banks +1.27 vs Financial Services/Healthcare ≈ +0.31/+0.32 median). That is
+  in-sample dispersion, not a look-ahead-safe signal — do NOT feed sector identity, sector
+  one-hots, or sector means to the model. Sector stays a GROUPING key for scoring only.
+- **Winsor caps refit train-only at split** (caps in the table were fit on the full
+  train-eligible set for EDA/assembly) — already flagged in the modelling-table block.
+
 ### Modelling-stage handling still pending (unchanged from before)
 - Negative book equity (MCD/PM/BKNG/ABBV): exclude ROE/equity_ratio or floor denom.
 - HealthA pharma gross margin (ABBV amortization-in-COGS): decide rev−cost consistent

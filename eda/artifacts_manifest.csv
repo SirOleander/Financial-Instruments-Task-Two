@@ -1,0 +1,20 @@
+artifact,description
+fig_dist_scores.png,"Histograms of the 9 score features, train vs pred-only"
+fig_dist_kpis.png,Histograms of 25 KPI features w/ winsor caps annotated
+fig_dist_winsor_rawvswins.png,Raw vs winsorized distributions for the six ratio-tail KPIs (train)
+fig_dist_target.png,"Target: raw vs winsorized Sharpe, 63d return & vol"
+skew_table.csv,Skew/kurtosis of every level feature + target (train-eligible)
+corr_matrix.csv,Pearson feature-feature corr (train-eligible)
+fig_corr_heatmap.png,Feature-feature correlation heatmap (train-eligible)
+high_corr_pairs.csv,Feature pairs with |Pearson|>0.8 (redundancy)
+feature_target_corr.csv,"Pearson+Spearman vs future_63d_sharpe, ranked; reliable=n>=800 (train-eligible)"
+fig_target_corr_bar.png,Top-20 feature-target Spearman correlations
+vif_table.csv,"VIF: scores block (n=1044) + core KPI block (n=796), train-eligible"
+missingness_by_feature.csv,Missing % per feature by all/train/US/international
+fig_missingness.png,"Per-feature missing %, US vs international"
+target_summary.csv,"Target summary stats, winsorized vs raw (train)"
+target_by_sector.csv,future_63d_sharpe by sector (train)
+target_by_frequency.csv,future_63d_sharpe by frequency (train)
+fig_target_by_sector.png,Boxplot of forward Sharpe by sector (train)
+target_autocorr.csv,Lag-1 autocorrelation of a company's consecutive forward Sharpes (train)
+EDA_SUMMARY.md,Written EDA readout + recommendations
