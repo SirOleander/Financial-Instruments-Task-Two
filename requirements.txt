@@ -7,7 +7,9 @@ yfinance>=0.2        # non-US fundamentals + daily prices (yf_ingest, price_inge
 openpyxl>=3.1        # Excel export engine for tools/viewdatabase.py
 numpy>=1.26          # direct import in H_modelling.py / I_eda.py (feature assembly, VIF, winsor)
 matplotlib>=3.8      # EDA figures written to eda/ (I_eda.py)
-scipy>=1.11          # modelling-stage stats (installed for EDA/modelling; not yet imported directly)
+scipy>=1.11          # spearmanr for rank-based model scoring (J_models.py); modelling stats
+scikit-learn>=1.4    # regression roster, Pipeline, TimeSeriesSplit, GridSearchCV (J_models.py)
+xgboost>=2.0         # gradient-boosted regressor in the roster (J_models.py)
 
 # NOT required (verified against real imports): openai (the operative LLM is called via
 # `requests`, not the OpenAI SDK), lxml (BeautifulSoup uses the stdlib html.parser).
