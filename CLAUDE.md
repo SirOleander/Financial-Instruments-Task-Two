@@ -221,6 +221,15 @@ of existing modelling_data columns (NOT a schema change):
 forward 63-day Sharpe on this universe/period. This is the RESULT, not a bug — do NOT try to
 tune it into a positive one.** It is exactly what market efficiency predicts, and the
 DELIVERABLE is the leak-free end-to-end methodology, not alpha. Preserve this conclusion.
+- **NULL HOLDS ON THE FULL MANDATED 98** (retrained after the 89→98 expansion): train+val
+  1039 rows / 73 companies, test 293. CV Spearman ∈ [−0.034,+0.013] (Lasso/EN still degenerate
+  to null); ensemble test Spearman −0.029; ablation max |CV|=0.040 — same near-zero. Backtest
+  (4 quarterly rebalances) long-short +0.15/−0.05/−0.17/+0.11, cum ≈ 0% (@10bps −0.06%, @0bps
+  +1.15%), ann Sharpe ~0.11, maxDD −21%; both legs +~50% in the bull market, no spread. The
+  result is robust to the universe expansion. predictions_all89.csv now holds all 98 (filename
+  kept for dashboard) with flags out_of_training_dist / prediction_only (25) / no_release_date
+  (5). GOOG & GOOGL predict identically (twins, adjacent ranks) — accepted redundancy.
+- Numbers below are the ORIGINAL 89-run (kept for reference; superseded by the 98 line above).
 - **Pipeline (J_models.py):** time split at 2025-03-31 (train+val 1023 rows ≤ split; untouched
   12-month test 285 rows > split, touched once). TimeSeriesSplit CV (5 folds, purge gap=21) on
   train+val. ALL preprocessing refit per fold inside a Pipeline (ratio-tail + change

@@ -329,7 +329,7 @@ def main():
             s = pd.Series(reg.feature_importances_, index=feat_order, name="importance")
             s.sort_values(ascending=False).to_csv(os.path.join(OUT, f"importance_{name}.csv"))
 
-    # ---- final models refit on ALL train_eligible, predict all 89 ----
+    # ---- final models refit on ALL train_eligible, predict ALL 98 latest rows ----
     all_te = df[df["train_eligible"] == 1]
     Xall, yall = build_X(all_te), all_te[TARGET_RAW].values
     Xp = build_X(pred89)
@@ -342,14 +342,17 @@ def main():
         final_preds[name] = m.predict(Xp)
     ens89 = np.mean([final_preds[m] for m in best3], axis=0)
 
+    train_cos = set(all_te["ticker"].unique())          # 73 companies with training rows
     out = pred89[["ticker", "sector", "company_group", "source", "report_release_date",
-                  "frequency", "operative_missing"]].copy()
-    out["out_of_training_dist"] = (pred89["source"] != "edgar").astype(int)  # 18 internationals
+                  "frequency", "operative_missing", "no_release_date"]].copy()
+    out["out_of_training_dist"] = (pred89["source"] != "edgar").astype(int)  # non-US
+    out["prediction_only"] = (~pred89["ticker"].isin(train_cos)).astype(int)  # 25 names, no training
     for name in models:
         out[f"pred_{name}"] = final_preds[name]
     out["pred_ensemble"] = ens89
     out = out.sort_values("pred_ensemble", ascending=False).reset_index(drop=True)
     out["rank_ensemble"] = np.arange(1, len(out) + 1)
+    # filename kept (dashboard consumes it) though it now holds all 98
     out.round(5).to_csv(os.path.join(OUT, "predictions_all89.csv"), index=False)
 
     write_summary(cv_df, test_df_out, best3, out)

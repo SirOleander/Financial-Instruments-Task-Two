@@ -13,22 +13,22 @@
 
 | period | n_universe | n_intl | long_ret | short_ret | gross_ls | intl_in_long | intl_in_short |
 |---|---|---|---|---|---|---|---|
-| 2025Q1 | 60 | 2 | +0.2248 | +0.0733 | +0.1515 | 0 | 0 |
-| 2025Q2 | 82 | 16 | +0.0768 | +0.1300 | -0.0532 | 0 | 4 |
-| 2025Q3 | 80 | 18 | +0.0212 | +0.2288 | -0.2076 | 1 | 5 |
-| 2025Q4 | 37 | 18 | +0.1340 | +0.0010 | +0.1331 | 4 | 7 |
+| 2025Q1 | 63 | 3 | +0.2803 | +0.1250 | +0.1553 | 0 | 0 |
+| 2025Q2 | 86 | 18 | +0.0771 | +0.1300 | -0.0530 | 0 | 4 |
+| 2025Q3 | 84 | 20 | +0.0540 | +0.2227 | -0.1687 | 2 | 5 |
+| 2025Q4 | 39 | 20 | +0.0863 | -0.0257 | +0.1121 | 5 | 6 |
 
 ## Strategy summary by transaction cost
 
 | cost_bps_oneway | cum_return_LS | mean_period_LS | ann_sharpe_LS | max_drawdown_LS |
 |---|---|---|---|---|
-| +0.0000 | -0.0211 | +0.0059 | +0.0700 | -0.2497 |
-| +5.0000 | -0.0272 | +0.0044 | +0.0523 | -0.2526 |
-| +10.0000 | -0.0332 | +0.0029 | +0.0346 | -0.2554 |
+| +0.0000 | +0.0115 | +0.0114 | +0.1525 | -0.2127 |
+| +5.0000 | +0.0054 | +0.0100 | +0.1327 | -0.2154 |
+| +10.0000 | -0.0006 | +0.0085 | +0.1130 | -0.2181 |
 
-**Headline (@10bps):** cumulative long-short -3.32%, annualized Sharpe +0.03, max drawdown -25.54% over 4 quarterly rebalances.
+**Headline (@10bps):** cumulative long-short -0.06%, annualized Sharpe +0.11, max drawdown -21.81% over 4 quarterly rebalances.
 
-Context (gross): long leg +52.73%, short leg +49.18%, equal-weight universe +43.16%.
+Context (gross): long leg +57.90%, short leg +51.44%, equal-weight universe +43.08%.
 
 ## Honest read
 

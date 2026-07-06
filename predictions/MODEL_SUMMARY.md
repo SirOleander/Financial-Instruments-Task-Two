@@ -6,12 +6,12 @@ Leak-safe: time split at **2025-03-31** (train+val <= vs 12-month test >), TimeS
 
 | model | cv_spearman_mean | cv_spearman_std | degenerate_constant |
 |---|---|---|---|
-| ElasticNet | +0.0112 | +0.0251 | 1 |
-| SVR | +0.0013 | +0.0762 | 0 |
+| ElasticNet | +0.0133 | +0.0388 | 1 |
 | Lasso | +0.0000 | +0.0000 | 1 |
-| RandomForest | -0.0218 | +0.0969 | 0 |
-| XGBoost | -0.0267 | +0.1009 | 0 |
-| Ridge | -0.0380 | +0.1024 | 0 |
+| SVR | -0.0070 | +0.0716 | 0 |
+| XGBoost | -0.0231 | +0.0881 | 0 |
+| RandomForest | -0.0280 | +0.0907 | 0 |
+| Ridge | -0.0341 | +0.1050 | 0 |
 
 **ElasticNet, Lasso collapsed to the NULL (constant) model** — with near-zero linear signal, regularization drives all coefficients to 0 and predicts the mean (CV Spearman 0.0 beats any negative). They carry no ranking information and are EXCLUDED from the ensemble. That collapse is itself an informative result: no linear feature combination beats the mean.
 
@@ -21,15 +21,15 @@ All CV means lie within ~±0.04 of zero with per-fold std ~0.07–0.10, i.e. **i
 
 | model | test_spearman_pooled | test_spearman_perperiod_mean | decile_spread_latestperco | perperiod_top10bot10_spread_mean | test_rmse |
 |---|---|---|---|---|---|
-| Ridge | -0.0458 | -0.0588 | +0.2515 | -0.0820 | +2.1366 |
-| Lasso | +0.0000 | +0.0000 | -0.3489 | -0.2047 | +2.0901 |
-| ElasticNet | +0.0000 | +0.0000 | -0.3489 | -0.2047 | +2.0901 |
-| RandomForest | -0.0357 | +0.0044 | -0.6845 | -0.3526 | +2.1125 |
-| XGBoost | -0.0775 | -0.0220 | +0.5832 | -0.6138 | +2.1800 |
-| SVR | -0.0031 | -0.0105 | +1.6908 | +0.4210 | +2.3574 |
-| ENSEMBLE(mean:SVR+RandomForest+XGBoost) | -0.0394 | -0.0064 | +0.9942 | -0.6328 | +2.1681 |
+| Ridge | -0.0475 | -0.0523 | +0.2727 | +0.2002 | +2.1499 |
+| Lasso | +0.0000 | +0.0000 | -0.2398 | -0.0555 | +2.1065 |
+| ElasticNet | +0.0000 | +0.0000 | -0.2398 | -0.0555 | +2.1065 |
+| RandomForest | -0.0410 | -0.0215 | +0.7465 | -0.6675 | +2.1197 |
+| XGBoost | -0.0341 | -0.0229 | -0.4089 | -0.9497 | +2.2085 |
+| SVR | -0.0039 | +0.0187 | +0.8127 | +0.0381 | +2.3624 |
+| ENSEMBLE(mean:SVR+XGBoost+RandomForest) | -0.0292 | -0.0188 | +0.7524 | -0.5106 | +2.1796 |
 
-**Ensemble = mean of best-3 NON-DEGENERATE models by CV Spearman: SVR, RandomForest, XGBoost.** The two decile-spread columns are noisy: the latest-per-company version ranks only ~7 names per tail, and the per-period top-10/bottom-10 spread averages over 4 test quarters — read signs, not magnitudes, and treat both as within-noise here.
+**Ensemble = mean of best-3 NON-DEGENERATE models by CV Spearman: SVR, XGBoost, RandomForest.** The two decile-spread columns are noisy: the latest-per-company version ranks only ~7 names per tail, and the per-period top-10/bottom-10 spread averages over 4 test quarters — read signs, not magnitudes, and treat both as within-noise here.
 
 ## Honest verdict
 
@@ -42,29 +42,29 @@ EDA showed max single-feature |Spearman| ~0.075; the models confirm it. **CV Spe
 **Top 10 (long):**
 | rank_ensemble | ticker | sector | pred_ensemble | out_of_training_dist |
 |---|---|---|---|---|
-| 1 | BA | Industrials | +2.1426 | 0 |
-| 2 | BAC | Banks | +1.8888 | 0 |
-| 3 | MU | Technology | +1.7406 | 0 |
-| 4 | SCHW | Banks | +1.7023 | 0 |
-| 5 | SAN.MC | Banks | +1.6606 | 1 |
-| 6 | IBM | Technology | +1.6384 | 0 |
-| 7 | KO | Consumer Staples | +1.5729 | 0 |
-| 8 | C | Banks | +1.5651 | 0 |
-| 9 | LLY | Healthcare | +1.5606 | 0 |
-| 10 | T | Communication | +1.5423 | 0 |
+| 1 | BA | Industrials | +2.4031 | 0 |
+| 2 | BAC | Banks | +1.9839 | 0 |
+| 3 | GOOG | Communication | +1.8325 | 0 |
+| 4 | GOOGL | Communication | +1.8325 | 0 |
+| 5 | SAN.MC | Banks | +1.7949 | 1 |
+| 6 | MU | Technology | +1.7364 | 0 |
+| 7 | 005930.KS | Technology | +1.7319 | 1 |
+| 8 | SCHW | Banks | +1.7195 | 0 |
+| 9 | 000660.KS | Technology | +1.7133 | 1 |
+| 10 | NFLX | Communication | +1.6814 | 0 |
 
 **Bottom 10 (short):**
 | rank_ensemble | ticker | sector | pred_ensemble | out_of_training_dist |
 |---|---|---|---|---|
-| 80 | ASML.AS | Technology | +0.1899 | 1 |
-| 81 | AAPL | Technology | +0.1359 | 0 |
-| 82 | NOW | Technology | +0.1226 | 0 |
-| 83 | V | Financial Services | +0.1013 | 0 |
-| 84 | CVX | Energy, Materials & Utilities | +0.0675 | 0 |
-| 85 | PG | Consumer Staples | +0.0048 | 0 |
-| 86 | TSM | Technology | -0.0053 | 1 |
-| 87 | INTC | Technology | -0.2116 | 0 |
-| 88 | AZN.L | Healthcare | -0.2206 | 1 |
-| 89 | SHOP.TO | Technology | -0.7383 | 1 |
+| 89 | ASML.AS | Technology | +0.2362 | 1 |
+| 90 | CVX | Energy, Materials & Utilities | +0.1865 | 0 |
+| 91 | AZN.L | Healthcare | +0.1606 | 1 |
+| 92 | TSM | Technology | +0.0952 | 1 |
+| 93 | V | Financial Services | +0.0947 | 0 |
+| 94 | INTU | Technology | +0.0584 | 0 |
+| 95 | NOW | Technology | +0.0519 | 0 |
+| 96 | PG | Consumer Staples | -0.0283 | 0 |
+| 97 | INTC | Technology | -0.2094 | 0 |
+| 98 | SHOP.TO | Technology | -0.5026 | 1 |
 
 Full ranking of all 89 in predictions_all89.csv (final models refit on ALL train_eligible rows; the 89 rows are each company's latest report, forward window still open — these are the ranking signals, not evaluable yet).
