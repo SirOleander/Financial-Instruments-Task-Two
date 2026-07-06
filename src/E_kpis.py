@@ -74,21 +74,28 @@ def _days(a: str, b: str) -> int:
 
 
 def load_reports() -> list[dict]:
-    """One record per (ticker, report_release_date). On a same-day annual+quarterly
-    collision, keep the quarterly form. positions = {pos: (value, missing_bool)}."""
+    """One record per (ticker, EFFECTIVE report date). On a same-day annual+quarterly
+    collision, keep the quarterly form. positions = {pos: (value, missing_bool)}.
+
+    EFFECTIVE report date = report_release_date, or fiscal_period_end_date when the release
+    date is NULL. The blocked non-US names (MC.PA/CBA.AX/NESN.SW/RHHBY, and ALV.DE's one
+    unmatched period) have NO usable release date, so they are keyed on their period-end
+    here (a KEY surrogate only — never a target t=0; price_target still skips them, so they
+    get target_missing downstream). Existing names all have real release dates, so their
+    effective key == release date and their kpi_values are unchanged."""
     with closing(B_database.get_connection()) as con:
         rows = con.execute(
             """
             SELECT ticker, report_release_date, form, fiscal_period_end_date,
                    sector, company_group, source, position, value, selection_status
             FROM financial_facts
-            WHERE report_release_date IS NOT NULL
             """
         ).fetchall()
 
     grouped: dict[tuple, dict] = {}
     for r in rows:
-        key = (r["ticker"], r["report_release_date"])
+        effective = r["report_release_date"] or r["fiscal_period_end_date"]
+        key = (r["ticker"], effective)
         g = grouped.setdefault(key, {"forms": {}})
         form = r["form"]
         fm = g["forms"].setdefault(form, {

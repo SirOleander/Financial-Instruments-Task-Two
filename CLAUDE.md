@@ -8,11 +8,52 @@ plan (17 steps, all signal formulas, scoring rubric, backtest spec) lives in
 here.
 
 ================================================================================
-## MILESTONE — data-acquisition phase COMPLETE (append/update; supersedes older
-## "72 tickers / EDGAR-only" statements below where they conflict)
+## MILESTONE — UNIVERSE EXPANDED 89 → 98 (the mandated fixed 98-stock list).
+## Supersedes the "89 companies" statements below where they conflict.
 ================================================================================
+The assignment mandates a FIXED 98-stock universe; we had trimmed 9 for data quality,
+which the task does NOT authorize. All 9 re-added (Task-Two) ADDITIVELY — the original 89's
+`financial_facts` / `daily_prices` rows were proven byte-identical (content-hash) before/after.
+Backup at `data/financials.db.bak_before9`.
+
+### The 9 re-added + per-name outcome (diagnostic-driven, data in hand):
+- **GOOG** (EDGAR, CIK = GOOGL's 0001652044, CommA): Alphabet Class C — fundamentals
+  IDENTICAL to GOOGL (same filer). Full training twin (18 train rows); operative COPIED
+  from GOOGL. **KNOWN MINOR REDUNDANCY: GOOG & GOOGL are near-duplicate training rows**
+  (identical features, slightly different targets from different share-class prices). BOTH
+  kept (both mandated); double-weighting is negligible on a near-null model — accepted.
+- **GEV** (EDGAR, CIK 0001996810, IndA): GE Vernova, spun off 2024 → short history; cleared
+  the uniform floor-6 (6 train rows) so it TRAINS. Operative falls back (no LITELLM_API_KEY
+  at rebuild time; can be LLM-scored later).
+- **TCEHY, 9988.HK, ALV.DE** (yfinance): usable but thin → prediction/ranking-only
+  (train_eligible=0, below floor). ALV.DE is an insurer: OCF/capex absent → cash-flow /
+  investment KPIs drop-and-renormalize (like banks lacking efficiency KPIs).
+- **MC.PA, CBA.AX, NESN.SW, RHHBY** (yfinance) — BLOCKED for targets: yfinance returns NO
+  usable report-release date (MC.PA/CBA.AX zero; NESN/RHHBY semi-annual, none matched). Per
+  decision: prediction/ranking-only. They get KPIs + sector scores (rankable) but NO target,
+  `target_missing=1`, `train_eligible=0`, `no_release_date=1`. Release dates were NOT
+  synthesized (that would fabricate the look-ahead anchor).
+
+### Keying rule for NULL-release rows (the 4 blocked + ALV.DE's 1 unmatched period)
+`report_release_date` is NULL in `financial_facts`, so DOWNSTREAM they are keyed on
+`fiscal_period_end_date` (a KEY SURROGATE only — never a target t=0). Implemented in
+`E_kpis.load_reports` (COALESCE(release, period_end); the `WHERE release IS NOT NULL` filter
+removed — only the 5 new NULL-having names are affected, 89 identical). `price_target` still
+filters `release IS NOT NULL`, so blocked names get no target. `H_modelling` adds a
+`no_release_date` flag (from financial_facts rows with NULL release) and LEFT-joins target
+(absent → target_missing). New config: `A_config` GOOG/GEV; `yf_ingest.UNIVERSE` +7 non-US
+(with `FIN`/`STAP` position lists + `NO_RELEASE_DATE_NAMES`).
+
+### 98-state table coverage (all six data tables rebuilt coherently, in order
+### kpi_values → scores → target_63d → operative(copy) → modelling_data):
+financial_facts 98 / daily_prices 98 / kpi_values 98 / scores 98 / modelling_data 98 tickers;
+target_63d 94 (4 blocked excluded); operative_scores 83 (US 10-K/20-F + GOOG copy).
+modelling_data: 1,733 rows, **1,332 train_eligible across 73 companies** (71 US + GOOG + GEV),
+401 prediction-only. **NOTE: predictions/ (model, ranking, backtest) + the dashboard are
+retrained/refreshed on 98 as the NEXT step — treat as stale until then.**
 
 ### Final universe: 89 companies, TWO sources in one `financial_facts` table
+NOTE: superseded — universe is now 98 (see the 89→98 milestone above). Original 89 detail:
 - **71 EDGAR** (US, `source='edgar'`) + **18 yfinance** (non-US, `source='yfinance'`).
 - Dropped from earlier lists: **GOOG** (kept GOOGL — same company, identical
   fundamentals, avoided double-counting Alphabet), **0700.HK (Tencent)** and

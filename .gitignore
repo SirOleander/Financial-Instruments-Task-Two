@@ -226,3 +226,6 @@ outputs/
 litellm_key.sh
 *_key.sh
 *.key
+
+# local DB safety backups (not versioned)
+data/*.db.bak*

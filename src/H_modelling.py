@@ -105,6 +105,12 @@ def load() -> list[dict]:
         tgt_rows = [dict(r) for r in con.execute(
             "SELECT ticker, report_release_date, future_63d_return, future_63d_volatility, "
             "future_63d_sharpe, status FROM target_63d")]
+        # surrogate keys: the blocked non-US names (and ALV.DE's one unmatched period) have
+        # NULL report_release_date, so downstream they are keyed on fiscal_period_end_date.
+        # Flag those rows: they get NO target (target_missing) and never train (floor).
+        no_rd_keys = {(r["ticker"], r["fiscal_period_end_date"]) for r in con.execute(
+            "SELECT DISTINCT ticker, fiscal_period_end_date FROM financial_facts "
+            "WHERE report_release_date IS NULL")}
 
     # wide KPI pivot + company_group lookup
     kpi_wide: dict[tuple, dict] = {}
@@ -197,6 +203,9 @@ def load() -> list[dict]:
         else:
             row["future_63d_return"] = row["future_63d_volatility"] = row["future_63d_sharpe"] = None
         row["target_missing"] = 1 if row["future_63d_sharpe"] is None else 0
+        # surrogate-keyed (no real release date) -> report_release_date column holds the
+        # period-end; flag it so the ranking/dashboard can show "no release date" honestly.
+        row["no_release_date"] = 1 if key in no_rd_keys else 0
 
         rows.append(row)
     return rows
@@ -427,7 +436,7 @@ def column_spec() -> list[tuple[str, str]]:
         ("first_obs", "INTEGER"), ("prior_release_date", "TEXT"),
         ("operative_missing", "INTEGER"), ("operative_match", "TEXT"),
         ("operative_asof_date", "TEXT"), ("target_missing", "INTEGER"),
-        ("train_eligible", "INTEGER"),
+        ("no_release_date", "INTEGER"), ("train_eligible", "INTEGER"),
     ]
     for c in SCORE_FEATURES + ["operative_score", "competitive_advantage_score_w050"]:
         cols.append((c, "REAL"))
