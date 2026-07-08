@@ -3,7 +3,8 @@ app.py — Signal Desk: report-signal equity-research dashboard (READ-ONLY).
 
 Deep-navy + indigo/purple chrome; green/red reserved for performance semantics. A slim
 full-width top bar (logo, search, horizontal nav, light/dark toggle) over a left ticker
-watchlist + four views: Ranking, Model & EDA, Backtest, Company Detail.
+watchlist + four nav views: Ranking, Model, Data, Backtest. Company Detail is a drill-down,
+reachable only by clicking a company in the watchlist or a Ranking row — it has no nav item.
 
 Reads data/financials.db plus the eda/, predictions/ and analysis/ artifacts via cached
 loaders. Writes nothing.
@@ -28,7 +29,11 @@ import data
 import ui
 
 ASSETS = Path(__file__).resolve().parent / "assets"
-VIEWS = ["Ranking", "Model & EDA", "Backtest", "Company Detail"]
+
+# The four standalone nav items. "Company Detail" is deliberately NOT here: it is a
+# drill-down, reachable only by clicking a company in the left watchlist (or a Ranking row).
+VIEWS = ["Ranking", "Model", "Data", "Backtest"]
+DETAIL_VIEW = "Company Detail"
 
 
 def _apply_native_theme(mode: str) -> None:
@@ -54,10 +59,15 @@ def _apply_native_theme(mode: str) -> None:
 
 
 def top_bar() -> str:
-    """Slim top bar: logo | search | nav | theme toggle. Returns the active view."""
+    """Slim top bar: logo | search | nav | theme toggle. Returns the active view.
+
+    Nav is four SEPARATE buttons sitting beside the search box, not a fused segmented pill
+    group. Because `view` is no longer a widget key (segmented_control owned it before), any
+    caller can now assign st.session_state["view"] directly — which is why the old
+    `_pending_view` deferral hack is gone."""
     with st.container(key="topbar"):
         c_logo, c_search, c_nav, c_toggle = st.columns(
-            [2.4, 3.2, 5.2, 0.7], vertical_alignment="center")
+            [1.9, 2.7, 4.6, 0.55], vertical_alignment="center")
         with c_logo:
             logo = ASSETS / "logo.png"
             if logo.exists():
@@ -68,8 +78,19 @@ def top_bar() -> str:
             st.text_input("search", placeholder="Search ticker or company…",
                           label_visibility="collapsed", key="co_search")
         with c_nav:
-            view = st.segmented_control("nav", VIEWS, key="view",
-                                        label_visibility="collapsed")
+            with st.container(key="navbar"):
+                # trailing spacer keeps the pills compact and left-aligned against the search
+                # box, rather than stretching them into four wide blocks (which would read as
+                # a fused segmented group again).
+                cols = st.columns([1, 1, 1, 1, 2.4], gap="small")
+                for col, name in zip(cols[:len(VIEWS)], VIEWS):
+                    with col:
+                        active = st.session_state["view"] == name
+                        if st.button(name, key=f"nav_{name.lower()}",
+                                     use_container_width=True,
+                                     type="primary" if active else "secondary"):
+                            st.session_state["view"] = name
+                            st.rerun()
         with c_toggle:
             icon = "☀" if st.session_state["mode"] == "dark" else "☾"
             if st.button(icon, key="themebtn", help="Toggle light / dark"):
@@ -78,7 +99,7 @@ def top_bar() -> str:
                 # must precede the rerun — see _apply_native_theme's timing note
                 _apply_native_theme(new_mode)
                 st.rerun()
-    return view or st.session_state["view"]
+    return st.session_state["view"]
 
 
 def watchlist(companies) -> None:
@@ -109,9 +130,7 @@ def watchlist(companies) -> None:
                              use_container_width=True,
                              type="primary" if selected else "secondary"):
                     st.session_state["selected"] = r["ticker"]
-                    # route via a pending flag: 'view' is a widget key and can't be set
-                    # after the nav widget is instantiated this run — apply it before.
-                    st.session_state["_pending_view"] = "Company Detail"
+                    st.session_state["view"] = DETAIL_VIEW  # the only route into detail
                     st.rerun()
 
 
@@ -126,9 +145,8 @@ def view_ranking(logos: dict) -> None:
                 unsafe_allow_html=True)
 
     ui.caveat(mode, "shown for completeness. Out-of-sample signal is weak (near-zero rank "
-                    "correlation) and the long/short backtest is flat — see the "
-                    "<b>Model &amp; EDA</b> tab. Rankings are low-confidence, not investment "
-                    "advice.")
+                    "correlation) and the long/short backtest is flat — see the <b>Model</b> "
+                    "tab. Rankings are low-confidence, not investment advice.")
 
     df = data.load_ranking()
     ui.flag_legend(mode, fc)
@@ -186,13 +204,13 @@ def view_ranking(logos: dict) -> None:
         if tk != st.session_state.get("_rank_last"):
             st.session_state["_rank_last"] = tk
             st.session_state["selected"] = tk
-            st.session_state["_pending_view"] = "Company Detail"
+            st.session_state["view"] = DETAIL_VIEW
             st.rerun()
     st.caption("Click a row to open its Company Detail. Click a column header to sort.")
 
 
-def _tab_performance(mode, cv, tm, ft_rel) -> None:
-    """CV selection + the one-shot test, and the feature→target correlation wall."""
+def _tab_performance(mode, cv, tm) -> None:
+    """CV selection + the one-shot test. (Feature→target correlation now lives under Data.)"""
     import pandas as pd
     import charts
 
@@ -213,26 +231,16 @@ def _tab_performance(mode, cv, tm, ft_rel) -> None:
             "not learned signal, so they are excluded from the ensemble and from the "
             "&ldquo;best model&rdquo; tile above.")
 
-    c1, c2 = st.columns([1, 1], gap="large")
-    with c1:
-        cvp = cv.sort_values("cv_spearman_mean").copy()
-        cvp["cv_spearman_mean_lo"] = cvp["cv_spearman_mean"] - cvp["cv_spearman_std"]
-        cvp["cv_spearman_mean_hi"] = cvp["cv_spearman_mean"] + cvp["cv_spearman_std"]
-        st.markdown('<div class="sd-note"><b>CV Spearman per model</b> (bars) with ±1 std '
-                    'whiskers. Every whisker straddles zero — no model beats chance.</div>',
-                    unsafe_allow_html=True)
-        st.altair_chart(charts.signed_bar(
-            cvp, "model", "cv_spearman_mean", mode, x_title="CV rank correlation",
-            domain=(-0.16, 0.16), height=230, err=True), width="stretch")
-    with c2:
-        top = ft_rel.reindex(ft_rel["spearman"].abs().sort_values(ascending=False).index).head(10)
-        max_ft = ft_rel["spearman"].abs().max()
-        st.markdown(f'<div class="sd-note"><b>Feature → target rank correlation</b> '
-                    f'(well-populated features, n≥800). The strongest is '
-                    f'~{max_ft:.3f} — essentially nothing.</div>', unsafe_allow_html=True)
-        st.altair_chart(charts.signed_bar(
-            top, "feature", "spearman", mode, x_title="Spearman vs future_63d_sharpe",
-            domain=(-0.1, 0.1), height=230), width="stretch")
+    cvp = cv.sort_values("cv_spearman_mean").copy()
+    cvp["cv_spearman_mean_lo"] = cvp["cv_spearman_mean"] - cvp["cv_spearman_std"]
+    cvp["cv_spearman_mean_hi"] = cvp["cv_spearman_mean"] + cvp["cv_spearman_std"]
+    st.markdown('<div class="sd-note"><b>CV Spearman per model</b> (bars) with ±1 std '
+                'whiskers. Every whisker straddles zero — no model beats chance. '
+                'The feature-level view of the same null lives under <b>Data</b>.</div>',
+                unsafe_allow_html=True)
+    st.altair_chart(charts.signed_bar(
+        cvp, "model", "cv_spearman_mean", mode, x_title="CV rank correlation",
+        domain=(-0.16, 0.16), height=240, err=True), width="stretch")
 
 
 def _tab_error(mode) -> None:
@@ -415,59 +423,113 @@ def _tab_robustness(mode) -> None:
     st.dataframe(abl, hide_index=True, width="stretch")
 
 
-def _tab_eda(mode) -> None:
-    ui.section("Exploratory data analysis")
-    ui.note("Full diagnostics, computed on <b>train-eligible rows only</b> and regenerated on "
-            "the final 97-name universe. Figures open on demand.")
-    figs = [
-        ("Feature → target correlation (all features)", "fig_target_corr_bar.png"),
-        ("Feature distributions · scores", "fig_dist_scores.png"),
-        ("Feature distributions · KPIs (winsor caps marked)", "fig_dist_kpis.png"),
+def _data_feature_target(mode, ft, ft_rel) -> None:
+    """The feature-level view of the null: how each feature ranks against the target."""
+    import charts
+
+    ui.section("Feature → target rank correlation")
+    max_ft = ft_rel["spearman"].abs().max()
+    ui.note(f"Spearman of each feature against <code>future_63d_sharpe</code>, on "
+            f"<b>train-eligible rows only</b>. Restricted to well-populated features "
+            f"(n≥800) — sparse bank-only KPIs show large correlations that are "
+            f"small-subsample artifacts, not deployable signal. The strongest reliable "
+            f"feature reaches <b>{max_ft:.3f}</b>. This is the feature-level statement of the "
+            f"same null the <b>Model</b> tab reports: no single feature carries the target.")
+
+    top = ft_rel.reindex(ft_rel["spearman"].abs().sort_values(ascending=False).index).head(15)
+    st.altair_chart(charts.signed_bar(
+        top, "feature", "spearman", mode, x_title="Spearman vs future_63d_sharpe",
+        domain=(-0.1, 0.1), height=380), width="stretch")
+
+    with st.expander("All features · full correlation table"):
+        show = ft[["feature", "n", "pearson", "spearman", "reliable"]].copy()
+        show = show.reindex(show["spearman"].abs().sort_values(ascending=False).index)
+        st.dataframe(show.round(4), hide_index=True, width="stretch")
+    with st.expander("Reference figure (matplotlib · top-20)"):
+        st.image(data.eda_fig("fig_target_corr_bar.png"), width="stretch")
+
+
+def _data_distributions(mode) -> None:
+    ui.section("Feature distributions")
+    ui.note("Distributions on train-eligible rows. Ratio-tail KPIs (ROIC, cash_conversion, "
+            "the <code>*_growth_yoy</code> family) carry extreme values from near-zero "
+            "denominators and are winsorized at the 1st/99th percentile — "
+            "<b>caps refit train-only inside each CV fold</b>, never on the full population.")
+    for label, fname in [
+        ("Scores · train vs prediction-only", "fig_dist_scores.png"),
+        ("KPIs (winsor caps marked)", "fig_dist_kpis.png"),
         ("Raw vs winsorized ratio-tails", "fig_dist_winsor_rawvswins.png"),
-        ("Target distribution", "fig_dist_target.png"),
-        ("Feature–feature correlation heatmap", "fig_corr_heatmap.png"),
-        ("Missingness (US vs international)", "fig_missingness.png"),
-        ("Forward Sharpe by sector (in-sample)", "fig_target_by_sector.png"),
-    ]
-    for label, fname in figs:
+    ]:
         with st.expander(label):
             st.image(data.eda_fig(fname), width="stretch")
+    with st.expander("Skew / kurtosis table"):
+        st.dataframe(data.load_skew().round(3), hide_index=True, width="stretch")
 
-    with st.expander("Multicollinearity (VIF) — by-construction identities"):
-        vif = data.load_vif()
-        vshow = vif[vif["flag"] != ""][["block", "feature", "VIF", "flag"]].copy()
-        n_inf = int((vif["VIF"] > 1e6).sum())
-        vshow["VIF"] = vshow["VIF"].map(lambda v: "∞" if v > 1e6 else f"{v:.1f}")
-        st.dataframe(vshow, hide_index=True, width="stretch")
-        # NB: n_inf counts FEATURES, not identities — one identity (e.g. financial_score =
-        # mean of the six sub-scores) makes several features perfectly collinear at once.
-        ui.note(f"<b>{n_inf} features</b> carry VIF = ∞ — perfect collinearity arising from a "
-                "handful of exact by-construction identities (financial_score = mean of the "
-                "six sub-scores; net_debt_to_assets = debt_to_assets − cash_to_assets; "
-                "free_cash_flow_margin = operating_cash_flow_margin − capex_intensity; …). "
-                "These, plus the high-VIF redundancies below, drove the de-duplicated feature "
-                "set — see CLAUDE.md.")
 
-    ui.note("<b>Sector is a grouping key for scoring, never a model feature.</b> Forward-Sharpe "
-            "medians do differ across sectors in-sample, but that is in-sample dispersion, not "
-            "a look-ahead-safe signal — no sector identity, one-hots or sector means are fed "
-            "to the model.")
+def _data_corr_vif(mode) -> None:
+    ui.section("Redundancy · feature–feature correlation and VIF")
+    vif = data.load_vif()
+    n_inf = int((vif["VIF"] > 1e6).sum())
+    # NB: n_inf counts FEATURES, not identities — one identity (e.g. financial_score =
+    # mean of the six sub-scores) makes several features perfectly collinear at once.
+    ui.note(f"<b>{n_inf} features</b> carry VIF = ∞ — perfect collinearity arising from a "
+            "handful of exact by-construction identities (financial_score = mean of the six "
+            "sub-scores; net_debt_to_assets = debt_to_assets − cash_to_assets; "
+            "free_cash_flow_margin = operating_cash_flow_margin − capex_intensity; …). "
+            "These, plus the high-VIF redundancies, drove the de-duplicated feature set.")
+
+    vshow = vif[vif["flag"] != ""][["block", "feature", "VIF", "flag"]].copy()
+    vshow["VIF"] = vshow["VIF"].map(lambda v: "∞" if v > 1e6 else f"{v:.1f}")
+    st.dataframe(vshow, hide_index=True, width="stretch")
+
+    with st.expander("Feature–feature correlation heatmap"):
+        st.image(data.eda_fig("fig_corr_heatmap.png"), width="stretch")
+    with st.expander("Redundant pairs (|Pearson| > 0.8)"):
+        st.dataframe(data.load_high_corr().round(3), hide_index=True, width="stretch")
+
+    ui.note("<b>Caution:</b> the six sub-scores ARE percentile aggregations of these KPIs, so "
+            "the sub-score block and the KPI block structurally overlap. Prefer regularized or "
+            "tree models; do not read linear coefficients naively. The <b>Model → Robustness</b> "
+            "tab ablates the two blocks against each other.")
+
+
+def _data_target(mode) -> None:
+    ui.section("Target and missingness")
+    ui.note("<code>future_63d_sharpe</code> = mean(daily ret t+1…t+63) / std · √252, with "
+            "t+1 the first trading day strictly <b>after the report release date</b> on each "
+            "stock's own calendar. Risk-free = 0 (a stated simplification; negligible for "
+            "within-period rankings).")
+    with st.expander("Target distribution (raw vs winsorized)", expanded=True):
+        st.image(data.eda_fig("fig_dist_target.png"), width="stretch")
+    with st.expander("Summary statistics"):
+        st.dataframe(data.load_target_summary().round(4), hide_index=True, width="stretch")
+    with st.expander("Forward Sharpe by sector (in-sample)"):
+        st.image(data.eda_fig("fig_target_by_sector.png"), width="stretch")
+        st.dataframe(data.load_target_by_sector().round(3), hide_index=True, width="stretch")
+        ui.note("<b>Sector is a grouping key for scoring, never a model feature.</b> These "
+                "medians differ in-sample, but that is in-sample dispersion, not a "
+                "look-ahead-safe signal — no sector identity, one-hots or sector means are fed "
+                "to the model.")
+    with st.expander("Missingness (US vs international)"):
+        st.image(data.eda_fig("fig_missingness.png"), width="stretch")
+        ui.note("A KPI that cannot be computed is <b>dropped and the sub-score renormalized</b> "
+                "over the remainder — never imputed with zero. Missing is "
+                "<code>selection_status='missing'</code>, never a naive <code>value == 0</code>.")
 
 
 def view_model() -> None:
+    """Model-specific diagnostics only: predictions/ + analysis/. EDA lives under Data."""
     mode = st.session_state["mode"]
-    st.markdown('<div class="sd-view-title">Model &amp; EDA</div>'
+    st.markdown('<div class="sd-view-title">Model</div>'
                 '<div class="sd-view-sub">Leak-safe model performance, error analysis, '
                 'interpretability and a classification cross-check — reported straight.</div>',
                 unsafe_allow_html=True)
 
     cv = data.load_cv()
     tm = data.load_test_metrics()
-    ft = data.load_feature_target()
     ens = tm[tm["model"].str.startswith("ENSEMBLE")].iloc[0]
     best_cv = data.best_real_cv(cv)          # excludes the degenerate constant models
-    ft_rel = ft[ft["reliable"] == True]
-    max_ft = ft_rel["spearman"].abs().max()
+    abl = data.load_ablation()
 
     ui.note("<b>Verdict:</b> report fundamentals carry <b>no reliable signal</b> for the "
             "forward 63-day Sharpe on this universe/period — the honest result, consistent "
@@ -475,18 +537,18 @@ def view_model() -> None:
             "value of this project is the leak-free methodology, not alpha.")
 
     ui.stat_tiles([
-        (f"{max_ft:.3f}", "Max feature |Spearman|", "strongest single feature vs target"),
         (f"{best_cv['cv_spearman_mean']:+.3f}", "Best CV Spearman",
          f"{best_cv['model']} · ±{best_cv['cv_spearman_std']:.3f} · non-degenerate models only"),
         (f"{ens['test_spearman_pooled']:+.3f}", "Ensemble test Spearman", "held-out 12-month test"),
         (f"{ens['test_rmse']:.2f}", "Ensemble test RMSE", "future_63d_sharpe units"),
+        (f"{abl['cv_spearman'].abs().max():.3f}", "Ablation max |CV Spearman|",
+         f"across all {len(abl)} feature-set × model cells"),
     ])
 
-    t1, t2, t3, t4, t5, t6 = st.tabs(
-        ["Performance", "Error analysis", "Feature importance", "Classification",
-         "Robustness", "EDA"])
+    t1, t2, t3, t4, t5 = st.tabs(
+        ["Performance", "Error analysis", "Feature importance", "Classification", "Robustness"])
     with t1:
-        _tab_performance(mode, cv, tm, ft_rel)
+        _tab_performance(mode, cv, tm)
     with t2:
         _tab_error(mode)
     with t3:
@@ -495,8 +557,43 @@ def view_model() -> None:
         _tab_classification(mode)
     with t5:
         _tab_robustness(mode)
-    with t6:
-        _tab_eda(mode)
+
+
+def view_data() -> None:
+    """Exploratory data analysis only: everything sourced from eda/."""
+    mode = st.session_state["mode"]
+    st.markdown('<div class="sd-view-title">Data</div>'
+                '<div class="sd-view-sub">Exploratory analysis of the modelling table — '
+                'features, redundancy, target and coverage. Train-eligible rows only.</div>',
+                unsafe_allow_html=True)
+
+    ft = data.load_feature_target()
+    ft_rel = ft[ft["reliable"] == True]
+    vif = data.load_vif()
+
+    ui.note("Everything here is computed on <b>train-eligible rows only</b> and regenerated on "
+            "the final 97-name universe. It is read-only: <code>I_eda.py</code> writes the "
+            "<code>eda/</code> artifacts, this view only displays them.")
+
+    ui.stat_tiles([
+        (f"{ft_rel['spearman'].abs().max():.3f}", "Max feature |Spearman|",
+         "strongest well-populated feature vs target"),
+        (f"{int(ft['n'].max()):,}", "Train-eligible rows", "one row per company-report"),
+        (f"{len(ft)}", "Features screened", f"{len(ft_rel)} well-populated (n≥800)"),
+        (f"{int((vif['VIF'] > 1e6).sum())}", "Features with VIF = ∞",
+         "perfect by-construction collinearity"),
+    ])
+
+    t1, t2, t3, t4 = st.tabs(
+        ["Feature → target", "Distributions", "Correlation & VIF", "Target & missingness"])
+    with t1:
+        _data_feature_target(mode, ft, ft_rel)
+    with t2:
+        _data_distributions(mode)
+    with t3:
+        _data_corr_vif(mode)
+    with t4:
+        _data_target(mode)
 
 
 def view_backtest(logos: dict) -> None:
@@ -726,7 +823,7 @@ def view_detail(companies) -> None:
                  "structurally annual) to train on, so the model scored it without ever having "
                  "learned from it — especially low-confidence.")
     ui.note("<b>Note:</b> the predicted Sharpe is the near-null model's output and should be "
-            "read as low-confidence (see Model &amp; EDA)." + extra)
+            "read as low-confidence (see the <b>Model</b> tab)." + extra)
 
 
 def main() -> None:
@@ -735,9 +832,6 @@ def main() -> None:
     st.session_state.setdefault("mode", "dark")
     st.session_state.setdefault("view", "Ranking")
     st.session_state.setdefault("selected", None)
-    # apply a pending view switch BEFORE the nav widget (key 'view') is instantiated
-    if "_pending_view" in st.session_state:
-        st.session_state["view"] = st.session_state.pop("_pending_view")
 
     companies = data.load_companies()
     logos = data.logo_uris()
@@ -745,17 +839,19 @@ def main() -> None:
 
     view = top_bar()
 
-    left, right = st.columns([1.15, 5.0], gap="medium")
+    left, right = st.columns([1.05, 5.4], gap="medium")
     with left:
         watchlist(companies)
     with right:
         if view == "Ranking":
             view_ranking(logos)
-        elif view == "Model & EDA":
+        elif view == "Model":
             view_model()
+        elif view == "Data":
+            view_data()
         elif view == "Backtest":
             view_backtest(logos)
-        else:
+        else:                       # DETAIL_VIEW — reachable only from the watchlist / ranking
             view_detail(companies)
 
 

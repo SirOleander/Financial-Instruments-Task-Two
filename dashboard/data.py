@@ -186,6 +186,24 @@ def load_target_by_sector() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def load_skew() -> pd.DataFrame:
+    """Skew/kurtosis of every level feature + the target (train-eligible)."""
+    return pd.read_csv(EDA_DIR / "skew_table.csv")
+
+
+@st.cache_data(show_spinner=False)
+def load_high_corr() -> pd.DataFrame:
+    """Feature pairs with |Pearson| > 0.8 — the redundancy that drove de-duplication."""
+    return pd.read_csv(EDA_DIR / "high_corr_pairs.csv")
+
+
+@st.cache_data(show_spinner=False)
+def load_target_summary() -> pd.DataFrame:
+    """Target summary stats, winsorized vs raw (train)."""
+    return pd.read_csv(EDA_DIR / "target_summary.csv")
+
+
+@st.cache_data(show_spinner=False)
 def load_backtest_periods() -> pd.DataFrame:
     return pd.read_csv(PRED_DIR / "backtest_periods.csv")
 

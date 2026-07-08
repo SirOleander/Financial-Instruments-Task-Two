@@ -620,6 +620,22 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
 `predictions/` + `analysis/` + `eda/`. **Writes nothing.** Modules: `app.py` (views),
 `ui.py` (palette/CSS), `charts.py` (Altair), `data.py` (cached loaders).
 
+- **Nav = four standalone pills beside the search box**: Ranking · Model · Data · Backtest.
+  Not a segmented group. **`Company Detail` has NO nav item** — it is a drill-down, reached
+  only by clicking a company in the left watchlist or a Ranking row.
+- **`view` is plain session state, NOT a widget key** (segmented_control owned it before), so
+  callers assign `st.session_state["view"]` directly. The old `_pending_view` deferral hack is
+  gone; do not reintroduce it.
+- **Model vs Data is a SOURCE split, and it is load-bearing.** `Model` = `predictions/` +
+  `analysis/` (CV/test performance, bias-variance + learning curves, feature importance,
+  classification). `Data` = `eda/` only (feature→target correlation, distributions,
+  correlation + VIF, target + missingness). Model *diagnostics* (importance, classification,
+  bias-variance) belong under Model even though they describe features — do not migrate them
+  to Data. The feature→target correlation chart is the one thing that moved the other way.
+- **Watchlist is flush-left**: `.block-container` drops its centering `max-width` and its left
+  gutter (`padding-left: .85rem`), putting the first ticker tile ~14px from the window edge.
+  Restoring `max-width:1680px` re-centers everything and undoes this.
+
 - **Every headline number is DERIVED from an artifact** — universe size, ablation max, the
   per-rebalance LS sequence, target std, VIF counts. Nothing about "97" is hard-coded, so a
   pipeline rerun cannot leave the narrative stale. Do NOT reintroduce literals.

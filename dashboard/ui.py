@@ -105,7 +105,10 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     }}
     .stApp {{ background:{P['bg']}; }}
     #MainMenu, header[data-testid="stHeader"], footer {{ visibility:hidden; height:0; }}
-    .block-container {{ padding:0 2.2rem 3rem; max-width:1680px; }}
+    /* Watchlist sits hard against the left window edge: kill the centering max-width and the
+       big left gutter. ~0.85rem here + the column's own padding lands the first ticker tile
+       roughly 1cm from the border. Right side keeps its normal gutter. */
+    .block-container {{ padding:0 2.2rem 3rem .85rem; max-width:100%; }}
     .mono, code {{ font-family:'IBM Plex Mono',ui-monospace,monospace; }}
     hr {{ border-color:{P['border_soft']}; }}
 
@@ -141,7 +144,25 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     [role="option"] {{ color:{P['text']} !important; }}
     [role="option"]:hover {{ background:{P['hover']} !important; }}
 
-    /* ---------------- top nav (segmented) — monochrome ---------------- */
+    /* ---------------- top nav: FOUR STANDALONE pills beside the search ----------------
+       Not a fused segmented group — each item is its own bordered button with a real gap. */
+    .st-key-navbar [data-testid="stHorizontalBlock"] {{ gap:9px; }}
+    .st-key-navbar [data-testid="stButton"] button {{
+      width:100%; min-height:0; padding:7px 12px; border-radius:9px;
+      border:1px solid {P['border']} !important; background:{P['card']} !important;
+      color:{P['muted']} !important; font-family:'Inter',sans-serif; font-weight:550;
+      font-size:.82rem; letter-spacing:.01em; box-shadow:none !important;
+      transition:color .1s ease, border-color .1s ease, background .1s ease;
+    }}
+    .st-key-navbar [data-testid="stButton"] button:hover {{
+      color:{P['strong']} !important; border-color:{P['accent']}88 !important;
+      background:{P['hover']} !important; }}
+    .st-key-navbar [data-testid="stButton"] button[kind="primary"] {{
+      background:{P['accent']} !important; border-color:{P['accent']} !important;
+      color:#fff !important; font-weight:650;
+      box-shadow:0 2px 10px {P['accent']}4d !important; }}
+
+    /* ---------------- in-content segmented controls (cost, model, scheme) ------------- */
     div[data-testid="stSegmentedControl"] [role="radiogroup"] {{ gap:2px; background:transparent; border:none; }}
     div[data-testid="stSegmentedControl"] button {{
       font-family:'Inter',sans-serif; font-weight:500; font-size:.84rem; letter-spacing:.01em;
@@ -156,7 +177,7 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
       color:#fff !important; background:{P['accent']} !important; font-weight:600;
       box-shadow:0 2px 10px {P['accent']}4d; }}
 
-    /* ---------------- inner tabs (Model & EDA curation) ---------------- */
+    /* ---------------- inner tabs (Model / Data curation) ---------------- */
     .stTabs [data-baseweb="tab-list"] {{ gap:2px; border-bottom:1px solid {P['border_soft']};
       background:transparent; }}
     .stTabs [data-baseweb="tab"] {{
