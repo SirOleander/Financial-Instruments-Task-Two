@@ -68,6 +68,54 @@ def price_line(df: pd.DataFrame, mode: str, height: int = 250) -> alt.Chart:
     return _themed(alt.layer(area, line).properties(height=height), P)
 
 
+def ohlc_price_line(df: pd.DataFrame, mode: str, height: int = 300) -> alt.Chart:
+    """Close-price line with a hover crosshair and an OHLC tooltip.
+
+    Deliberate choices:
+      * ONE series (close), so no legend — the section title names it. Open/high/low live in
+        the tooltip rather than as extra marks: this is a price OVERVIEW, not a candlestick.
+      * The line is neutral `strong`, not green/red. A price LEVEL has no polarity; the
+        direction is stated once, in the period-change badge, where green/red is earned.
+      * Crosshair = a vertical rule at the hovered date + a horizontal rule at that close,
+        both recessive dashed. The invisible wide `selectors` layer makes the hit target the
+        full plot height, so the tooltip fires anywhere in the column, not just on the line.
+      * NO area fill. `mark_area` implicitly sets y2=0, which drags the scale's domain down to
+        zero and overrides `zero=False` — the price line then reads as a flat band in the top
+        half of the plot. A truncated baseline is correct for a LINE (it encodes position);
+        it is only an anti-pattern for BARS, which encode length.
+    df: [date, open, high, low, close]."""
+    P = ui.palette(mode)
+    hover = alt.selection_point(fields=["date"], nearest=True, on="mouseover",
+                                empty=False, clear="mouseout")
+
+    base = alt.Chart(df).encode(
+        x=alt.X("date:T", title=None, axis=alt.Axis(format="%Y", tickCount="year")),
+        y=alt.Y("close:Q", title="price (own listing currency)",
+                scale=alt.Scale(zero=False, nice=True)))
+
+    line = base.mark_line(color=P["strong"], strokeWidth=1.6)
+
+    # full-height hit target: carries the selection AND the tooltip
+    selectors = alt.Chart(df).mark_rule(strokeWidth=8, opacity=0).encode(
+        x="date:T",
+        tooltip=[alt.Tooltip("date:T", title="Date", format="%d %b %Y"),
+                 alt.Tooltip("close:Q", title="Close", format=",.2f"),
+                 alt.Tooltip("open:Q", title="Open", format=",.2f"),
+                 alt.Tooltip("high:Q", title="High", format=",.2f"),
+                 alt.Tooltip("low:Q", title="Low", format=",.2f")],
+    ).add_params(hover)
+
+    vrule = alt.Chart(df).mark_rule(color=P["muted"], strokeDash=[3, 3], size=1).encode(
+        x="date:T", opacity=alt.condition(hover, alt.value(0.85), alt.value(0)))
+    hrule = base.transform_filter(hover).mark_rule(
+        color=P["muted"], strokeDash=[3, 3], size=1).encode(y="close:Q")
+    point = base.transform_filter(hover).mark_point(
+        size=60, filled=True, color=P["accent"], stroke=P["bg"], strokeWidth=1.5)
+
+    return _themed(
+        alt.layer(line, hrule, vrule, point, selectors).properties(height=height), P)
+
+
 def profile_bars(df: pd.DataFrame, cat: str, val: str, mode: str, height: int = 210) -> alt.Chart:
     """Horizontal [0,1] percentile bars with a 0.5 median reference and end labels."""
     P = ui.palette(mode)

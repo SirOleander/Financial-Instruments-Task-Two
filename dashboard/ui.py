@@ -478,6 +478,20 @@ def hero_badge(ticker: str, sector: str, logo_uri: str | None, mode: str = "dark
             f'{ticker.split(".")[0][:2]}</div>')
 
 
+def change_badge(mode: str, pct: float, label: str) -> str:
+    """Period %-change pill. Green/red is legitimate here — this IS direction of performance,
+    and the sign is in the text too, so identity is never colour-alone."""
+    P = palette(mode)
+    col = P["up"] if pct >= 0 else P["down"]
+    arrow = "▲" if pct >= 0 else "▼"
+    return (f'<span style="display:inline-flex;align-items:center;gap:7px;'
+            f'font-family:IBM Plex Mono,monospace;font-size:.82rem;font-weight:600;'
+            f'color:{col};border:1px solid {col}55;background:{col}14;border-radius:8px;'
+            f'padding:4px 11px;">{arrow} {pct:+.1%}'
+            f'<span style="color:{P["muted"]};font-weight:400;font-size:.72rem;'
+            f'letter-spacing:.04em;">{label}</span></span>')
+
+
 def scope_note(mode: str, text: str) -> None:
     """The single prominent tab-level scope/caveat statement on the Ranking view.
 

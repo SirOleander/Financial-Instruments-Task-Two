@@ -687,6 +687,28 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
   buttons with `theme.primaryColor`. The active view is named by the page's own title, not the
   nav. No divider under the header. The logo is a click-home target (transparent `logobtn`
   overlay -> Ranking) and works whether or not a logo file exists.
+- **OHLC price chart is FIREWALLED from the pipeline.** `dashboard/fetch_ohlc.py` caches raw
+  (unadjusted) OHLC for the 97 into **`data/ohlc_display.db`** — a SEPARATE DATABASE FILE, not
+  a table in `financials.db`. This is deliberate and stronger than a separate table: the
+  modelling DB is never opened for writing, so its **file md5 is provably unchanged**
+  (`60aa6798…` before and after the fetch; all 7 tables byte-identical, `daily_ohlc` absent).
+  Rules, do not relax them:
+    * Nothing in `src/` reads `ohlc_display.db`, and nothing ever should. No feature, target
+      or score derives from it. It exists only to draw the Company Detail price chart.
+    * `daily_prices` (ADJUSTED close, in financials.db) remains the TARGET's price source —
+      `src/price_target.py` builds `future_63d_sharpe` from it. The OHLC store is
+      **unadjusted** on purpose (a chart should show prices as traded). The two series differ
+      numerically BY DESIGN; mixing them would silently corrupt the target. Do not reconcile.
+    * `fetch_ohlc.py` and `data.company_ohlc()` open their databases with `mode=ro` URIs, so
+      they are structurally incapable of writing the modelling DB.
+    * 97/97 tickers cached, 0 failures. A ticker with no cache falls back to the
+      `daily_prices` adjusted-close line, then to a caption — a missing chart never errors.
+  Chart: close-price line (no area — `mark_area` implies `y2=0` and would drag the domain to
+  zero, overriding `zero=False`; a truncated baseline is correct for a LINE, which encodes
+  position, and is only an anti-pattern for BARS, which encode length), hover crosshair
+  (vertical + horizontal dashed rules), tooltip with Date/Close/Open/High/Low, and a
+  green/red period-change badge (colour is earned here — it IS direction — and the sign is in
+  the text). No volume bars.
 - **Display tickers are STRIPPED; the real ticker is always the key.** `data.display_tickers()`
   maps `SHEL.L -> SHEL`, `005930.KS -> 005930` (only the dot-suffix; `BRK-B` and `NOVO-B` keep
   their share class). Used ONLY for rendered text in the Watchlist, the Ranking table and the

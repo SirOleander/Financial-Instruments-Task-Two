@@ -351,6 +351,46 @@ def company_prices(ticker: str) -> pd.DataFrame:
     return df
 
 
+# ------------------------------------------------------- DISPLAY-ONLY OHLC (firewalled) --- #
+# A SEPARATE database file. It holds raw (unadjusted) OHLC purely to draw the Company Detail
+# price chart. It is NOT part of the modelling pipeline: nothing in src/ reads it, no feature,
+# target or score derives from it, and it is never joined to financials.db. The target's price
+# source remains `daily_prices` (ADJUSTED close) inside financials.db — a different, and
+# deliberately different, series. See dashboard/fetch_ohlc.py for the full firewall note.
+OHLC_DB = ROOT / "data" / "ohlc_display.db"
+
+
+@st.cache_data(show_spinner=False)
+def company_ohlc(ticker: str) -> pd.DataFrame:
+    """Raw OHLC for the detail chart, or an empty frame if this ticker has no cache.
+
+    Opened READ-ONLY (`mode=ro`), and against the OHLC file only — this function is
+    structurally incapable of touching the modelling database."""
+    if not OHLC_DB.exists():
+        return pd.DataFrame(columns=["date", "open", "high", "low", "close"])
+    uri = f"file:{OHLC_DB.as_posix()}?mode=ro"
+    try:
+        with sqlite3.connect(uri, uri=True) as con:
+            df = pd.read_sql_query(
+                "SELECT date, open, high, low, close FROM daily_ohlc "
+                "WHERE ticker = ? ORDER BY date", con, params=[ticker])
+    except sqlite3.Error:
+        return pd.DataFrame(columns=["date", "open", "high", "low", "close"])
+    if len(df):
+        df["date"] = pd.to_datetime(df["date"])
+    return df
+
+
+def period_change(df: pd.DataFrame, col: str = "close") -> float | None:
+    """First -> last % change over the loaded window. None if not computable."""
+    if len(df) < 2:
+        return None
+    first, last = df[col].iloc[0], df[col].iloc[-1]
+    if not first:
+        return None
+    return float(last / first - 1.0)
+
+
 # ---------------------------------------------------------------- analysis/ (slide-24) --- #
 @st.cache_data(show_spinner=False)
 def load_train_vs_val() -> pd.DataFrame:

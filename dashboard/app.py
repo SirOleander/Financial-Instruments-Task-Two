@@ -760,17 +760,34 @@ def view_detail(companies) -> None:
          "Operative score", "qualitative 1–5 → [0,1]"),
     ])
 
-    # ---- price ----
-    ui.section("Price · adjusted close")
-    px = data.company_prices(tk)
-    if len(px):
-        st.altair_chart(charts.price_line(px, mode), width="stretch")
-        ret = px["adjusted_close"].iloc[-1] / px["adjusted_close"].iloc[0] - 1
-        ui.note(f"{px['date'].min():%b %Y} – {px['date'].max():%b %Y} · "
-                f"total change <b>{ret:+.0%}</b> (own listing currency; price level, not a "
-                "model input).")
+    # ---- price overview ----
+    # DISPLAY ONLY. This chart reads the firewalled `ohlc_display.db`; nothing here feeds the
+    # model. Falls back to daily_prices (adjusted close) if a ticker has no OHLC cache, and to
+    # a caption if it has neither — thin/blocked names still have prices, so this is rare.
+    ui.section("Price · overview")
+    ohlc = data.company_ohlc(tk)
+    if len(ohlc):
+        chg = data.period_change(ohlc, "close")
+        span = f"{ohlc['date'].min():%b %Y} – {ohlc['date'].max():%b %Y}"
+        if chg is not None:
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:12px;margin:2px 0 10px;">'
+                f'{ui.change_badge(mode, chg, span)}</div>', unsafe_allow_html=True)
+        st.altair_chart(charts.ohlc_price_line(ohlc, mode), width="stretch")
+        ui.note("Daily close, unadjusted, in the stock's own listing currency (London names "
+                "are in GBp). Hover for date and OHLC. <b>Display only</b> — this series is "
+                "cached separately and is never used by the model; the target is built from "
+                "the adjusted-close series in <code>daily_prices</code>.")
     else:
-        st.caption("No price history.")
+        px = data.company_prices(tk)          # graceful fallback: adjusted close
+        if len(px):
+            st.altair_chart(charts.price_line(px, mode), width="stretch")
+            ret = data.period_change(px, "adjusted_close")
+            if ret is not None:
+                ui.note(f"{px['date'].min():%b %Y} – {px['date'].max():%b %Y} · total change "
+                        f"<b>{ret:+.0%}</b> (adjusted close; no OHLC cached for this ticker).")
+        else:
+            st.caption("No price history.")
 
     # ---- score profile + history ----
     ui.section("Signal profile")
