@@ -107,11 +107,9 @@ def watchlist(companies) -> None:
     user reads — so the list is truly A→Z on screen. NOT sector-grouped. Filtering to one
     sector preserves that order, so a single sector reads A→Z too.
 
-    Numeric tickers (000660, 005930, 6758, 7203, 8306, 9988) land FIRST, before the letters.
-    That is a CONSCIOUS choice, not an accident of ASCII: a plain string sort puts digits
-    before letters, and "numbers first, then A→Z" is the simplest rule to state and the
-    easiest to scan. To push them to the bottom instead, key on
-    `(display[0].isdigit(), display)`.
+    Numeric tickers (6758, 7203, 8306, 9988, 000660, 005930) are pushed to the END, after the
+    letters — the alphabet reads first, then the numbered listings. A plain string sort would
+    put digits FIRST (ASCII), so the leading `_num` key deliberately overrides that.
 
     The sort lives HERE, not in `data.load_companies()`, for two reasons: (a) sorting by the
     display ticker needs `display_tickers()`, which itself calls `load_companies()` — sorting
@@ -127,9 +125,11 @@ def watchlist(companies) -> None:
         st.selectbox("sector", sectors, label_visibility="collapsed", key="co_sector")
 
         disp = data.display_tickers()
-        # sort by the rendered label, once, before filtering (filters preserve row order)
-        df = companies.assign(_disp=companies["ticker"].map(disp)) \
-                      .sort_values("_disp", kind="stable")
+        # sort by the rendered label, once, before filtering (filters preserve row order).
+        # `_num` (0 for letters, 1 for digit-leading) sorts A→Z first, numeric tickers last.
+        _disp = companies["ticker"].map(disp)
+        df = (companies.assign(_disp=_disp, _num=_disp.str[0].str.isdigit().astype(int))
+              .sort_values(["_num", "_disp"], kind="stable"))
         pick = st.session_state.get("co_sector", "All sectors")
         if pick != "All sectors":
             df = df[df["sector"] == pick]

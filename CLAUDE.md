@@ -736,9 +736,9 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
   `load_companies()` — putting it in the loader would be circular. (Every other consumer of
   `load_companies()` is order-independent: dict lookups, boolean filters, unique CSS
   selectors — so the loader's `ORDER BY sector, ticker` is retained and harmless.)
-  The six numeric tickers (000660, 005930, 6758, 7203, 8306, 9988) sort BEFORE the letters —
-  a plain string sort puts digits first, and "numbers first, then A→Z" was chosen
-  deliberately. To flip them to the bottom, key on `(disp[0].isdigit(), disp)`.
+  The six numeric tickers (6758, 7203, 8306, 9988, 000660, 005930) are pushed to the END,
+  after the letters, via a leading `_num` sort key. A plain string sort puts digits FIRST
+  (ASCII), so that key deliberately overrides it: `sort_values(["_num", "_disp"])`.
 - **Display tickers are STRIPPED; the real ticker is always the key.** `data.display_tickers()`
   maps `SHEL.L -> SHEL`, `005930.KS -> 005930` (only the dot-suffix; `BRK-B` and `NOVO-B` keep
   their share class). Used ONLY for rendered text in the Watchlist, the Ranking table and the
