@@ -1,0 +1,9 @@
+scheme,model,cv_auc,test_auc,test_accuracy,test_balanced_accuracy,test_precision,test_recall,test_f1,majority_baseline_acc,n_test,best_params,cm_tn,cm_fp,cm_fn,cm_tp
+train_fitted_tercile,LogisticRegression,0.4808,0.5225,0.5,0.5184,0.6098,0.4132,0.4926,0.5874,206,{'model__C': 10},53,32,71,50
+train_fitted_tercile,RandomForest,0.4713,0.5256,0.4951,0.495,0.5825,0.4959,0.5357,0.5874,206,"{'model__max_depth': None, 'model__min_samples_leaf': 5}",42,43,61,60
+train_fitted_tercile,XGBoost,0.4738,0.5206,0.5291,0.5134,0.5984,0.6033,0.6008,0.5874,206,"{'model__max_depth': 2, 'model__learning_rate': 0.05, 'model__reg_lambda': 5}",36,49,48,73
+train_fitted_tercile,SVM,0.534,0.5287,0.4854,0.4797,0.5688,0.5124,0.5391,0.5874,206,{'model__C': 10},38,47,59,62
+within_period_tercile,LogisticRegression,0.4636,0.5362,0.5421,0.5421,0.5455,0.5053,0.5246,0.5,190,{'model__C': 0.01},55,40,47,48
+within_period_tercile,RandomForest,0.4839,0.4872,0.4895,0.4895,0.4878,0.4211,0.452,0.5,190,"{'model__max_depth': 3, 'model__min_samples_leaf': 20}",53,42,55,40
+within_period_tercile,XGBoost,0.4988,0.4942,0.5105,0.5105,0.5114,0.4737,0.4918,0.5,190,"{'model__max_depth': 2, 'model__learning_rate': 0.02, 'model__reg_lambda': 5}",52,43,50,45
+within_period_tercile,SVM,0.5102,0.4522,0.4789,0.4789,0.4818,0.5579,0.5171,0.5,190,{'model__C': 0.1},38,57,42,53

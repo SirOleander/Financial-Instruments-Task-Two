@@ -255,6 +255,54 @@ DELIVERABLE is the leak-free end-to-end methodology, not alpha. Preserve this co
   ablation_results, coef_/importance_*, predictions_all89, backtest_periods/holdings/summary,
   fig_backtest_equity.png, MODEL_SUMMARY.md, BACKTEST_SUMMARY.md.
 
+### SLIDE-24 GRADING ITEMS — DONE on the 98 model (src/L_analysis.py → `analysis/`)
+Additive + read-only (DB and `predictions/` untouched). Same leak-safe protocol as J_models
+(time split 2025-03-31, TimeSeriesSplit(5, gap=21), all preprocessing refit per fold).
+
+**1. Error analysis — bias & variance. THE ASSUMED "high-bias/low-variance everywhere" READING
+WAS WRONG; the data shows TWO failure modes with one identical outcome. Do NOT restate the
+old assumption — use this:**
+- **Underfit / high-bias, ~ZERO variance:** Lasso & ElasticNet regularize EVERY coefficient to
+  exactly 0 → they literally ARE the mean-predictor (train RMSE 1.945 ≈ val 1.966, train ρ =
+  val ρ = 0).
+- **Overfit / HIGH variance, zero payoff:** XGBoost train ρ **+0.949** vs val −0.023; SVR
+  +0.924/−0.007; RandomForest +0.806/−0.028 (train RMSE 0.78–1.55 vs val 2.00–2.18). They
+  memorize the training rows and generalize at zero — the capacity is spent fitting NOISE.
+  Ridge in between (train ρ +0.300, val −0.034). Calling these "low-variance" is FALSE.
+- **Learning curves are FLAT in training size** (RF val RMSE 1.864→1.853, XGB 2.036→2.007 as
+  rows 121→811; target std 1.983). If variance were the binding constraint validation error
+  would FALL with more data — it does not.
+- **Conclusion:** total error dominated by **irreducible noise + bias**, not variance. More
+  data / more capacity / more tuning cannot fix this — **only a genuinely more informative
+  feature set could.** The near-zero result is itself stable (fold spread straddles zero;
+  reproduces across the ablation and the 89→98 expansion).
+
+**2. Feature importance — the models are NOT black boxes.**
+- **Lasso & ElasticNet select 0 / 48 features** (all coefficients exactly zero) — the cleanest
+  statement of the null: no linear combination beats the intercept.
+- Ridge: 48/48 non-zero but tiny; RF/XGB importances spread thinly (no dominant split var);
+  SVR explained via permutation importance on VALIDATION folds (never test).
+- Rank-consensus top-5: growth_score_change, profitability_score,
+  operating_cash_flow_growth_yoy_change, operating_margin_change, equity_ratio_change —
+  mostly CHANGE features. **Magnitudes are trivial; this ranks near-noise.** Interpretability
+  CONFIRMS the null, it does not rescue it.
+
+**3. Classification lens — near-chance, confirms the regression null.**
+- Label = top-third vs bottom-third realized future_63d_sharpe (middle dropped), matching the
+  long/short framing. **LEAK CONTROL: tercile cutoffs fit on TRAIN ROWS ONLY** — per CV fold
+  from that fold's train rows; from train+val for the one-shot test. Test outcomes never
+  inform any cutoff; no cutoff fit on the pooled data.
+- Test AUC 0.521–0.529 (chance 0.500); CV AUC mostly BELOW 0.5 → sign disagreement = noise.
+- **Majority baseline acc = 0.587** (train-fitted cutoff + higher test-regime Sharpes leave the
+  test set 58.7% one class), so every model's raw accuracy is BELOW that baseline. Read AUC and
+  balanced accuracy (~0.5). Balanced within-period variant (50/50) reproduces: AUC 0.452–0.536.
+- Verdict: a classification framing gives the SAME answer — cannot separate future winners from
+  losers better than chance.
+
+**HONEST CAVEAT (keep stating it):** the test set was already used once by the regression; this
+classification evaluation touches it a SECOND time, under a PRE-COMMITTED protocol (labels,
+models, grids, metrics all fixed before looking). No iterative tuning against test.
+
 ### Modelling-stage handling still pending (unchanged from before)
 - Negative book equity (MCD/PM/BKNG/ABBV): exclude ROE/equity_ratio or floor denom.
 - HealthA pharma gross margin (ABBV amortization-in-COGS): decide rev−cost consistent
