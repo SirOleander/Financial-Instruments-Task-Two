@@ -5,25 +5,33 @@ Read-only. Compares financial_facts.report_release_date (per ticker+accession)
 against us_release_dates.csv (freshly pulled SEC filingDate). Reports any
 mismatch. This proves the US release dates are correct, not just present.
 
-Run from src/ (needs B_database) with us_release_dates.csv in the same folder.
+Read-only diagnostic in tools/. Reads us_release_dates.csv from the repo root.
+
+    python tools/verify_release_dates.py
 """
 
 from __future__ import annotations
 
+import sys
 from contextlib import closing
+from pathlib import Path
 
 import pandas as pd
 
-import B_database
+# this diagnostic lives in tools/; make the src/ package importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from fi import db
+
+CSV_PATH = Path(__file__).resolve().parent.parent / "us_release_dates.csv"
 
 
 def main() -> None:
-    sec = pd.read_csv("us_release_dates.csv", dtype=str)
+    sec = pd.read_csv(CSV_PATH, dtype=str)
     sec["filing_date"] = pd.to_datetime(sec["filing_date"]).dt.date.astype(str)
     sec_map = {(r.ticker, r.accession_number): r.filing_date
                for r in sec.itertuples()}
 
-    with closing(B_database.get_connection()) as conn:
+    with closing(db.get_connection()) as conn:
         rows = conn.execute(
             "SELECT DISTINCT ticker, accession_number, report_release_date "
             "FROM financial_facts WHERE source='edgar' "

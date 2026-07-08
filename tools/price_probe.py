@@ -30,7 +30,7 @@ import pandas as pd
 # this diagnostic lives in tools/; make the flat pipeline modules in src/ importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import B_database
+from fi import db
 
 try:
     import yfinance as yf
@@ -48,7 +48,7 @@ POLITE_SLEEP = 1.0
 def universe() -> list[dict]:
     """Distinct tickers with their source, fundamentals currency, and earliest
     report release date — straight from financial_facts. Never hardcoded."""
-    with closing(B_database.get_connection()) as con:
+    with closing(db.get_connection()) as con:
         rows = con.execute(
             """
             SELECT ticker,

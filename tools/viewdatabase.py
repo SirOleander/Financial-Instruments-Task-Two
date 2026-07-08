@@ -11,10 +11,10 @@ import pandas as pd
 
 # this utility lives in tools/; make the flat pipeline config in src/ importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-import A_config
+from fi import config
 
-DATABASE_PATH = A_config.DATABASE_PATH
-OUTPUT_PATH = A_config.BASE_DIR / "outputs" / "financials_database_export.xlsx"
+DATABASE_PATH = config.DATABASE_PATH
+OUTPUT_PATH = config.BASE_DIR / "outputs" / "financials_database_export.xlsx"
 
 OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
