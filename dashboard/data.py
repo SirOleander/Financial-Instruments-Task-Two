@@ -109,6 +109,38 @@ def app_logo_uri(mode: str = "dark") -> tuple[str | None, bool]:
 
 
 @st.cache_data(show_spinner=False)
+def display_tickers() -> dict[str, str]:
+    """real ticker -> DISPLAY ticker (exchange suffix stripped).
+
+    DISPLAY ONLY. The real ticker stays the key everywhere: session state, row-click routing,
+    logo lookup, DB queries, predictions joins. Never feed a display string back into a lookup.
+
+    Only the exchange suffix after a DOT is stripped, so 'SHEL.L' -> 'SHEL' and '005930.KS' ->
+    '005930', while 'BRK-B' and 'NOVO-B.CO' -> 'NOVO-B' keep their hyphenated share class.
+
+    COLLISION GUARD: if two tickers would collapse to the same display string (a hypothetical
+    US 'SAN' alongside 'SAN.MC'), BOTH keep their full ticker, so every displayed ticker stays
+    unique. Currently there are no collisions in the 97 — see `display_ticker_collisions()`."""
+    tickers = load_companies()["ticker"].tolist()
+    base = {t: t.split(".")[0] for t in tickers}
+    counts: dict[str, int] = {}
+    for b in base.values():
+        counts[b] = counts.get(b, 0) + 1
+    return {t: (b if counts[b] == 1 else t) for t, b in base.items()}
+
+
+@st.cache_data(show_spinner=False)
+def display_ticker_collisions() -> dict[str, list[str]]:
+    """{collapsed_base: [tickers that collide]} — empty when every stripped ticker is unique.
+    Those tickers retain their full suffix in `display_tickers()`."""
+    tickers = load_companies()["ticker"].tolist()
+    groups: dict[str, list[str]] = {}
+    for t in tickers:
+        groups.setdefault(t.split(".")[0], []).append(t)
+    return {b: ts for b, ts in groups.items() if len(ts) > 1}
+
+
+@st.cache_data(show_spinner=False)
 def logo_uris() -> dict[str, str]:
     """ticker -> base64 data URI for every cached logo in dashboard/logos/.
 

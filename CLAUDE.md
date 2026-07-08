@@ -687,6 +687,16 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
   buttons with `theme.primaryColor`. The active view is named by the page's own title, not the
   nav. No divider under the header. The logo is a click-home target (transparent `logobtn`
   overlay -> Ranking) and works whether or not a logo file exists.
+- **Display tickers are STRIPPED; the real ticker is always the key.** `data.display_tickers()`
+  maps `SHEL.L -> SHEL`, `005930.KS -> 005930` (only the dot-suffix; `BRK-B` and `NOVO-B` keep
+  their share class). Used ONLY for rendered text in the Watchlist, the Ranking table and the
+  basket chips. Widget keys, `session_state["selected"]`, row-click routing, logo lookup and
+  every DB/predictions join stay on the REAL ticker — a display string is not a valid key
+  (all 22 stripped names fail a `logo_uris()` lookup). **Company Detail always shows the full
+  exchange-qualified ticker** (`.tkfull`), so the exact symbol remains available.
+  `display_ticker_collisions()` guards the transform: if two tickers would collapse to the
+  same string (a US `SAN` alongside `SAN.MC`), BOTH keep their full suffix. No collisions in
+  the current 97; the guard is verified against a synthetic collision.
 - **Company icons: TradingView symbol logos, ROUND, vector.** `dashboard/fetch_logos.py`
   resolves each ticker to TradingView's `logoid` via their public symbol-search endpoint and
   caches `dashboard/logos/{TICKER}.svg` (+ `_manifest.csv`). **97/97 coverage, 0 fallbacks.**

@@ -101,18 +101,25 @@ def top_bar() -> str:
 
 
 def watchlist(companies) -> None:
-    """Left column: sector filter + the ticker-only company list (names on hover)."""
+    """Left column: sector filter + the ticker-only company list (names on hover).
+
+    Tickers are shown WITHOUT their exchange suffix; the real ticker remains the widget key,
+    the session-state value and the routing identity. Search still matches the real ticker, so
+    typing 'SHEL.L' or 'SHEL' both find Shell."""
     with st.container(key="watchlist"):
         sectors = ["All sectors"] + sorted(companies["sector"].unique())
         st.selectbox("sector", sectors, label_visibility="collapsed", key="co_sector")
 
+        disp = data.display_tickers()
         df = companies
         pick = st.session_state.get("co_sector", "All sectors")
         if pick != "All sectors":
             df = df[df["sector"] == pick]
         q = (st.session_state.get("co_search") or "").strip().lower()
         if q:
+            # match on the real ticker, the display ticker and the name
             df = df[df["ticker"].str.lower().str.contains(q)
+                    | df["ticker"].map(lambda t: q in disp[t].lower())
                     | df["name"].str.lower().str.contains(q)]
 
         st.markdown(f'<div class="sd-wl-label"><span>Watchlist</span>'
@@ -122,12 +129,13 @@ def watchlist(companies) -> None:
             if df.empty:
                 st.caption("No matches.")
             for _, r in df.iterrows():
-                selected = st.session_state.get("selected") == r["ticker"]
-                if st.button(r["ticker"], key=ui.safe_key(r["ticker"]),
-                             help=f"{r['name']} · {r['sector']}",
+                tk = r["ticker"]                       # the real key — never the display string
+                selected = st.session_state.get("selected") == tk
+                if st.button(disp[tk], key=ui.safe_key(tk),
+                             help=f"{r['name']} · {r['sector']} · {tk}",
                              use_container_width=True,
                              type="primary" if selected else "secondary"):
-                    st.session_state["selected"] = r["ticker"]
+                    st.session_state["selected"] = tk
                     st.session_state["view"] = DETAIL_VIEW  # the only route into detail
                     st.rerun()
 
@@ -158,9 +166,10 @@ def view_ranking(logos: dict) -> None:
         f"that model. This is a methodology demonstration, not a portfolio.")
 
     df = data.load_ranking()
+    disp = data.display_tickers()          # DISPLAY ONLY — routing still uses the real ticker
     longs = df[df["basket"] == "LONG"]["ticker"].tolist()
     shorts = df[df["basket"] == "SHORT"]["ticker"].tolist()
-    ui.basket_summary(mode, longs, shorts)
+    ui.basket_summary(mode, [disp[t] for t in longs], [disp[t] for t in shorts])
 
     # Summary-level (NOT per-row) honesty line: how much of the actual book is out-of-sample.
     # The general scope statement above cannot convey this — "6 of the 20 picks" is a concrete
@@ -179,18 +188,19 @@ def view_ranking(logos: dict) -> None:
     ui.ranking_table_head()
     with st.container(key="ranktable"):     # gap:0 wrapper — rows must butt up against each other
         for _, r in df.iterrows():
-            key = ui.safe_key(r["ticker"])
+            tk = r["ticker"]                # the real key — logos, routing and state all use it
+            key = ui.safe_key(tk)
             with st.container(key=f"rkrow_{key}"):
                 st.markdown(
                     ui.ranking_row_html(
-                        mode, rank=int(r["rank_ensemble"]), logo=logos.get(r["ticker"]),
-                        ticker=r["ticker"], name=r["name"], sector=r["sector"],
+                        mode, rank=int(r["rank_ensemble"]), logo=logos.get(tk),
+                        ticker=disp[tk], name=r["name"], sector=r["sector"],
                         pred=float(r["pred_ensemble"]), basket=r["basket"],
-                        selected=st.session_state.get("selected") == r["ticker"]),
+                        selected=st.session_state.get("selected") == tk),
                     unsafe_allow_html=True)
-                if st.button(r["ticker"], key=f"rkbtn_{key}", use_container_width=True,
-                             help=f"Open {r['name']} detail"):
-                    st.session_state["selected"] = r["ticker"]
+                if st.button(tk, key=f"rkbtn_{key}", use_container_width=True,
+                             help=f"Open {r['name']} detail ({tk})"):
+                    st.session_state["selected"] = tk
                     st.session_state["view"] = DETAIL_VIEW
                     st.rerun()
 
@@ -728,9 +738,12 @@ def view_detail(companies) -> None:
     chips = f'<span class="sd-chip">{conf}</span>'
     if rr["operative_missing"]:
         chips += '<span class="sd-chip">No operative score</span>'
+    # Detail always shows the FULL, exchange-qualified ticker (Ranking/Watchlist strip the
+    # suffix for scanability) — this is where the exact symbol must remain available.
     st.markdown(
         f'<div class="sd-hero">{badge}<div><div class="nm">{r["name"]}</div>'
-        f'<div class="sub">{tk} &nbsp;·&nbsp; {r["sector"]} &nbsp;·&nbsp; '
+        f'<div class="sub"><span class="tkfull" title="Exchange-qualified ticker">{tk}</span>'
+        f' &nbsp;·&nbsp; {r["sector"]} &nbsp;·&nbsp; '
         f'{r["company_group"]} {chips}</div></div></div>',
         unsafe_allow_html=True)
 

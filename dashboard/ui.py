@@ -339,6 +339,8 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     .sd-hero .nm {{ font-size:1.2rem; font-weight:700; color:{P['strong']}; }}
     .sd-hero .sub {{ color:{P['muted']}; font-size:.78rem; font-family:'IBM Plex Mono',monospace;
       letter-spacing:.05em; margin-top:3px; }}
+    /* the full exchange-qualified ticker — Ranking/Watchlist show it stripped */
+    .sd-hero .sub .tkfull {{ color:{P['strong']}; font-weight:600; }}
     .sd-chip {{ display:inline-block; font-size:.62rem; letter-spacing:.13em; text-transform:uppercase;
       border:1px solid {P['border']}; border-radius:999px; padding:3px 10px; color:{P['muted']}; margin-left:8px; }}
     .sd-empty {{ color:{P['muted']}; border:1px dashed {P['border']}; border-radius:12px; padding:40px;
@@ -508,9 +510,12 @@ def ranking_table_head() -> None:
 
 def ranking_row_html(mode: str, *, rank: int, logo: str | None, ticker: str, name: str,
                      sector: str, pred: float, basket: str, selected: bool) -> str:
-    """One full-width grid row. Basket pills use the reserved green/red (real long/short
-    semantics); the predicted Sharpe stays NEUTRAL — it is a model output, not realized
-    performance, and colouring it green/red would imply a result the model does not have."""
+    """One full-width grid row. `ticker` here is the DISPLAY ticker (exchange suffix stripped);
+    the caller keys the row, the logo and the click target off the real ticker.
+
+    Basket pills use the reserved green/red (real long/short semantics); the predicted Sharpe
+    stays NEUTRAL — it is a model output, not realized performance, and colouring it green/red
+    would imply a result the model does not have."""
     P = palette(mode)
     tint = (f"{P['up']}26" if basket == "LONG"
             else f"{P['down']}26" if basket == "SHORT" else "transparent")
