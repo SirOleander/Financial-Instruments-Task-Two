@@ -46,6 +46,7 @@ every step of the refactor.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import sqlite3
@@ -229,8 +230,43 @@ def inv_forward_window(con) -> Result:
                   f"{bad_short} short windows mis-flagged, {bad_ok} 'ok' rows malformed")
 
 
+def _code_without_comments_or_docstrings(src: str) -> str:
+    """Executable source only: comments and docstrings stripped, other literals KEPT.
+
+    A real firewall breach reads a path — `sqlite3.connect(".../ohlc_display.db")` — so we
+    must NOT strip string literals in general. But documentation is entitled to NAME the
+    store in order to state the prohibition (fi/market.py does exactly that). Docstrings and
+    comments are therefore removed, and everything else is searched.
+    """
+    import io
+    import tokenize
+
+    docstring_pos = set()
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = getattr(node, "body", None)
+            if (body and isinstance(body[0], ast.Expr)
+                    and isinstance(body[0].value, ast.Constant)
+                    and isinstance(body[0].value.value, str)):
+                docstring_pos.add((body[0].value.lineno, body[0].value.col_offset))
+
+    kept = []
+    for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+        if tok.type == tokenize.COMMENT:
+            continue
+        if tok.type == tokenize.STRING and tok.start in docstring_pos:
+            continue
+        kept.append(tok.string)
+    return "\n".join(kept)
+
+
 def inv_firewall(con) -> Result:
-    """The OHLC display cache is a SEPARATE database and no pipeline module may read it."""
+    """The OHLC display cache is a SEPARATE database and no pipeline module may read it.
+
+    Enforced against EXECUTABLE code, not prose: `fi/market.py`'s docstring names the store
+    precisely in order to forbid it, and that must not read as a violation. A genuine breach
+    would need a path string or an import, both of which survive the strip.
+    """
     problems = []
     if con.execute("SELECT 1 FROM sqlite_master WHERE name='daily_ohlc'").fetchone():
         problems.append("daily_ohlc table found INSIDE financials.db")
@@ -238,10 +274,19 @@ def inv_firewall(con) -> Result:
     for py in sorted((ROOT / "src").rglob("*.py")):
         if py.resolve() == me:
             continue  # this verifier NAMES the store in order to police it
-        if "ohlc_display" in py.read_text(encoding="utf-8", errors="ignore").lower():
-            problems.append(f"src module references ohlc_display: {py.relative_to(ROOT).as_posix()}")
+        src = py.read_text(encoding="utf-8", errors="ignore")
+        if "ohlc" not in src.lower():
+            continue
+        try:
+            code = _code_without_comments_or_docstrings(src)
+        except SyntaxError:  # pragma: no cover - a broken module is a louder problem
+            code = src
+        if "ohlc_display" in code.lower():
+            problems.append(f"src module CODE references ohlc_display: "
+                            f"{py.relative_to(ROOT).as_posix()}")
     return Result("firewall: OHLC store isolated", not problems,
-                  "; ".join(problems) or "daily_ohlc absent from financials.db; no src/ reference")
+                  "; ".join(problems) or "daily_ohlc absent; no src/ code reference "
+                                         "(docstrings may name it)")
 
 
 def inv_backtest_sign() -> Result:
