@@ -59,9 +59,9 @@ def top_bar() -> str:
     """Slim top bar: [logo] [ search + 4 nav items, centred ] [theme toggle].
 
     The search box and the four nav items form ONE centred group with equal ~0.5cm gaps.
-    Nav items are borderless until hover; only the active one is filled with the accent.
-    The logo is a click-home target -> Ranking (a transparent button overlays it, the same
-    in-session trick used by the ranking rows).
+    Nav items are plain text (white on dark, black on light) with NO active-state highlight —
+    outline + tint on hover only. The logo is a click-home target -> Ranking (a transparent
+    button overlays it, the same in-session trick used by the ranking rows).
 
     `view` is plain session state, not a widget key, so any caller may assign it directly."""
     with st.container(key="topbar"):
@@ -80,11 +80,12 @@ def top_bar() -> str:
                 with cols[0]:
                     st.text_input("search", placeholder="Search ticker or company…",
                                   label_visibility="collapsed", key="co_search")
+                # NO active-state highlight: every nav item is a plain text button, always
+                # `secondary`. Streamlit fills `primary` buttons with theme.primaryColor, so
+                # marking the current view would reintroduce the purple pill.
                 for col, name in zip(cols[1:], VIEWS):
                     with col:
-                        active = st.session_state["view"] == name
-                        if st.button(name, key=f"nav_{name.lower()}",
-                                     type="primary" if active else "secondary"):
+                        if st.button(name, key=f"nav_{name.lower()}"):
                             st.session_state["view"] = name
                             st.rerun()
         with c_toggle:
@@ -659,6 +660,9 @@ def view_backtest(logos: dict) -> None:
     # ---- holdings explorer ----
     ui.section("Holdings · what the book actually held")
     hold = data.load_backtest_holdings()
+    # ImageColumn paints on a canvas grid that CSS cannot round, so this one surface uses the
+    # variant with the circle clipped into the SVG source itself.
+    round_logos = data.logo_uris_round()
     period_pick = st.selectbox("Rebalance", per["period"].tolist(), key="bt_period")
     cL, cR = st.columns(2, gap="large")
     for col, leg, color, label in [(cL, "long", P["up"], "LONG · top 10"),
@@ -669,7 +673,7 @@ def view_backtest(logos: dict) -> None:
                         unsafe_allow_html=True)
             g = hold[(hold["period"] == period_pick) & (hold["leg"] == leg)].copy()
             show = pd.DataFrame({
-                "Logo": [logos.get(t, "") for t in g["ticker"]],
+                "Logo": [round_logos.get(t, "") for t in g["ticker"]],
                 "Ticker": g["ticker"].values,
                 "Sector": g["sector"].values,
                 "Realized 63d": g["realized_63d_return"].values,

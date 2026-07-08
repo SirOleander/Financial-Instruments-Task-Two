@@ -39,6 +39,7 @@ DARK = dict(
     text="#b9c0d9", strong="#f2f4fa", muted="#7c86a8", faint="#5c6785",
     sel_bg="#1e2450", sel_bar="#7b61ff", hover="#171d3d", input_bg="#121738",
     accent="#7b61ff", accent_soft="#a78bfa", accent_dim="#2a2560",
+    nav_text="#ffffff",          # plain text nav — white on dark
     up="#26a69a", down="#ef5350",
 )
 LIGHT = dict(
@@ -46,6 +47,7 @@ LIGHT = dict(
     text="#3b415c", strong="#0a0e1f", muted="#6e7690", faint="#8a93b2",
     sel_bg="#efecfd", sel_bar="#5b45e0", hover="#f4f5fb", input_bg="#ffffff",
     accent="#5b45e0", accent_soft="#7c66ea", accent_dim="#e8e4fb",
+    nav_text="#000000",          # plain text nav — black on light
     up="#089981", down="#f23645",
 )
 
@@ -96,10 +98,10 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     for t, s in zip(companies["ticker"], companies["sector"]):
         sel = f".st-key-colist .st-key-{safe_key(t)} button::before"
         if t in logo_uris:
-            # `contain` (not a %) — the URI is already trimmed + margined to a square canvas
-            # by data._normalize_logo, so contain fills the tile at the mark's true aspect.
-            rules.append(f"{sel}{{background:#fff url({logo_uris[t]}) center/contain no-repeat;"
-                         f"border-color:{P['border_soft']};}}")
+            # TradingView SVGs are full-bleed squares with the brand colour as background:
+            # `cover` fills the round tile edge-to-edge, exactly as TradingView renders them.
+            # No white chip, no `contain` letterboxing.
+            rules.append(f"{sel}{{background:url({logo_uris[t]}) center/cover no-repeat;}}")
         else:
             rules.append(f"{sel}{{background:{sector_color(s, mode)};}}")
     dot_rules = "\n".join(rules)
@@ -203,21 +205,25 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     .st-key-navgroup .stTextInput, .st-key-navgroup .stTextInput input {{
       width:{SEARCH_W}px !important; }}
 
+    /* Plain TEXT nav (TradingView-style): white on dark / black on light, NO persistent
+       highlight — not even on the active view. Outline + tint appear on hover only.
+       The active view is therefore not indicated in the nav; the page's own <h1> names it. */
     .st-key-navgroup [data-testid="stButton"] button {{
       width:auto; min-height:0; padding:7px 14px; border-radius:9px; white-space:nowrap;
       border:1px solid transparent !important;   /* no persistent outline */
       background:transparent !important;
-      color:{P['muted']} !important; font-family:'Inter',sans-serif; font-weight:550;
+      color:{P['nav_text']} !important; font-family:'Inter',sans-serif; font-weight:550;
       font-size:.82rem; letter-spacing:.01em; box-shadow:none !important;
       transition:color .1s ease, border-color .1s ease, background .1s ease;
     }}
     .st-key-navgroup [data-testid="stButton"] button:hover {{
-      color:{P['strong']} !important; border-color:{P['accent']}88 !important;
+      color:{P['nav_text']} !important; border-color:{P['accent']}88 !important;
       background:{P['hover']} !important; }}
+    /* belt and braces: even if a `primary` button ever slips through (Streamlit fills those
+       with theme.primaryColor), it must not read as an active-state highlight */
     .st-key-navgroup [data-testid="stButton"] button[kind="primary"] {{
-      background:{P['accent']} !important; border-color:{P['accent']} !important;
-      color:#fff !important; font-weight:650;
-      box-shadow:0 2px 10px {P['accent']}4d !important; }}
+      background:transparent !important; border-color:transparent !important;
+      color:{P['nav_text']} !important; font-weight:550; box-shadow:none !important; }}
 
     /* ---------------- in-content segmented controls (cost, model, scheme) ------------- */
     div[data-testid="stSegmentedControl"] [role="radiogroup"] {{ gap:2px; background:transparent; border:none; }}
@@ -302,8 +308,9 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
       font-family:'IBM Plex Mono',monospace; font-weight:500; font-size:.88rem; letter-spacing:.02em;
       transition:background .1s ease, border-color .1s ease;
     }}
+    /* ROUND company icon (TradingView style) */
     .st-key-colist [data-testid="stButton"] button::before {{
-      content:""; flex:0 0 auto; width:40px; height:40px; border-radius:9px;
+      content:""; flex:0 0 auto; width:40px; height:40px; border-radius:50%;
       background:{P['faint']}; border:1px solid transparent;
       box-shadow:0 1px 3px rgba(0,0,0,.18); }}
     /* clip long tickers at the button — the column no longer has overflow-x to do it */
@@ -327,8 +334,8 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
 
     .sd-hero {{ border:1px solid {P['border']}; border-radius:12px; padding:20px 22px; background:{P['card']};
       display:flex; align-items:center; gap:16px; margin-bottom:16px; }}
-    .sd-hero .tkb {{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:.9rem; color:#fff;
-      width:58px;height:58px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto; }}
+    .sd-hero .tkb {{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:1rem; color:#fff;
+      width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:0 0 auto; }}
     .sd-hero .nm {{ font-size:1.2rem; font-weight:700; color:{P['strong']}; }}
     .sd-hero .sub {{ color:{P['muted']}; font-size:.78rem; font-family:'IBM Plex Mono',monospace;
       letter-spacing:.05em; margin-top:3px; }}
@@ -381,10 +388,11 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     .sd-rt-row .c {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
     .sd-rt-row .rank {{ font-family:'IBM Plex Mono',monospace; font-size:.8rem;
       color:{P['muted']}; }}
+    /* ROUND company icons — same treatment as the watchlist and the detail hero */
     .sd-rt-row .logo {{ display:flex; align-items:center; }}
-    .sd-rt-row .logo img {{ width:26px; height:26px; border-radius:6px; background:#fff;
-      object-fit:contain; padding:1px; }}
-    .sd-rt-row .logo .fallback {{ width:26px; height:26px; border-radius:6px; color:#fff;
+    .sd-rt-row .logo img {{ width:26px; height:26px; border-radius:50%;
+      object-fit:cover; display:block; }}
+    .sd-rt-row .logo .fallback {{ width:26px; height:26px; border-radius:50%; color:#fff;
       display:flex; align-items:center; justify-content:center;
       font-family:'IBM Plex Mono',monospace; font-size:.58rem; font-weight:700; }}
     .sd-rt-row .tk {{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:.83rem;
@@ -458,13 +466,14 @@ def logo_html(logo_uri: str | None = None, whiten: bool = False) -> str:
 
 
 def hero_badge(ticker: str, sector: str, logo_uri: str | None, mode: str = "dark") -> str:
-    """Detail-hero badge: real logo on a white tile if available, else a sector-colored
-    tile with the ticker's leading characters (graceful, never a broken image)."""
+    """Detail-hero badge: the round TradingView logo if cached, else a round sector-coloured
+    badge with the ticker's leading characters — same 58px circle either way, so a missing
+    logo never breaks the layout (graceful, never a broken image)."""
     if logo_uri:
-        return (f'<div class="tkb" style="background:#fff url({logo_uri}) center/contain '
-                f'no-repeat;border:1px solid rgba(0,0,0,.14)"></div>')
+        return (f'<div class="tkb" style="background:url({logo_uri}) center/cover '
+                f'no-repeat"></div>')
     return (f'<div class="tkb" style="background:{sector_color(sector, mode)}">'
-            f'{ticker.split(".")[0][:4]}</div>')
+            f'{ticker.split(".")[0][:2]}</div>')
 
 
 def scope_note(mode: str, text: str) -> None:

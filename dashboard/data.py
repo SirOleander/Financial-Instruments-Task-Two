@@ -10,6 +10,7 @@ count is never hard-coded: it is derived from the data via `universe_meta()`.
 from __future__ import annotations
 
 import base64
+import re
 import sqlite3
 from pathlib import Path
 
@@ -43,47 +44,6 @@ def load_companies() -> pd.DataFrame:
         )
     df["is_intl"] = df["source"] != "edgar"
     return df.reset_index(drop=True)
-
-
-LOGO_BOX = 128      # normalized canvas (px)
-LOGO_MARGIN = 0.06  # breathing room around the trimmed mark, as a fraction of the box
-
-
-def _normalize_logo(raw: bytes) -> bytes:
-    """Trim a logo's transparent padding, re-center it on a square canvas with a small
-    uniform margin, and scale it to fill.
-
-    The fetched PNGs are wildly inconsistent: GS/HSBA fill their whole 128x128 canvas while
-    JPM's mark is 16x16 inside it (2% fill) and AXP's is 32x32 (6%). CSS `background-size`
-    scales the CANVAS, so without trimming those marks render as ~4px specks in a 40px tile
-    — the enlarged tile alone cannot fix it. Normalizing here (not by rewriting the committed
-    PNGs) keeps the fix with the consumer and survives a logo re-fetch.
-
-    Aspect ratio is preserved: a wide wordmark stays wide, it just fills the width. Falls
-    back to the raw bytes if Pillow is unavailable or the image has no alpha content."""
-    try:
-        import io
-        from PIL import Image
-    except ImportError:
-        return raw
-    try:
-        im = Image.open(io.BytesIO(raw)).convert("RGBA")
-        bbox = im.getchannel("A").getbbox()
-        if not bbox:
-            return raw
-        mark = im.crop(bbox)
-        inner = int(LOGO_BOX * (1 - 2 * LOGO_MARGIN))
-        w, h = mark.size
-        scale = inner / max(w, h)
-        mark = mark.resize((max(1, round(w * scale)), max(1, round(h * scale))),
-                           Image.LANCZOS)
-        canvas = Image.new("RGBA", (LOGO_BOX, LOGO_BOX), (0, 0, 0, 0))
-        canvas.paste(mark, ((LOGO_BOX - mark.width) // 2, (LOGO_BOX - mark.height) // 2), mark)
-        buf = io.BytesIO()
-        canvas.save(buf, format="PNG")
-        return buf.getvalue()
-    except Exception:
-        return raw
 
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -150,16 +110,72 @@ def app_logo_uri(mode: str = "dark") -> tuple[str | None, bool]:
 
 @st.cache_data(show_spinner=False)
 def logo_uris() -> dict[str, str]:
-    """ticker -> base64 data URI for every cached logo in dashboard/logos/, each normalized
-    to a consistent square canvas. Tickers with no file simply aren't in the dict (the UI
-    falls back to the styled sector badge). Encoded once (cached), served inline so no
-    static-file server / network is needed at render time."""
+    """ticker -> base64 data URI for every cached logo in dashboard/logos/.
+
+    These are TradingView symbol logos: **vector SVG**, a full-bleed square with the brand
+    colour as background, meant to be clipped to a circle (the UI does that). Vector means one
+    cached asset renders crisply at 26px in the table and 58px in the hero — no rasterization,
+    no per-size normalization (which is why the old PNG trim/centre step is gone).
+
+    `Path.stem` strips only the LAST suffix, so 'SAN.MC.svg' -> 'SAN.MC' and '8306.T.svg' ->
+    '8306.T' — ticker names containing dots survive intact.
+
+    Tickers with no file simply aren't in the dict; the UI falls back to a round, sector-
+    coloured initials badge. Encoded once (cached) and served inline, so no static-file server
+    or network access is needed at render time. Regenerate with dashboard/fetch_logos.py."""
     out: dict[str, str] = {}
     if LOGO_DIR.exists():
-        for p in sorted(LOGO_DIR.glob("*.png")):
-            b64 = base64.b64encode(_normalize_logo(p.read_bytes())).decode("ascii")
-            out[p.stem] = f"data:image/png;base64,{b64}"
+        for p in sorted(LOGO_DIR.glob("*.svg")):
+            b64 = base64.b64encode(p.read_bytes()).decode("ascii")
+            out[p.stem] = f"data:image/svg+xml;base64,{b64}"
     return out
+
+
+_SVG_OPEN = re.compile(rb"(<svg\b[^>]*>)", re.I)
+
+
+def _round_svg(raw: bytes) -> bytes:
+    """Clip an SVG's contents to a circle, in the SVG source itself.
+
+    Everywhere we render logos in our own HTML we round them with `border-radius:50%`. The
+    Backtest holdings table is the exception: it is `st.dataframe`'s ImageColumn, drawn on a
+    canvas grid that CSS cannot reach, so the icon would render square there and break the
+    uniform round style. Wrapping the markup in a clipped <g> makes the ASSET round, so it is
+    round no matter who paints it. Falls back to the original bytes if the shape is unexpected.
+    """
+    m = _SVG_OPEN.search(raw)
+    if not m:
+        return raw
+    open_tag = m.group(1)
+    body = raw[m.end():]
+    end = body.rfind(b"</svg>")
+    if end == -1:
+        return raw
+    inner, tail = body[:end], body[end:]
+    # TradingView marks are a 56x56 viewport; clip to the inscribed circle.
+    defs = (b'<defs><clipPath id="sd-rc"><circle cx="28" cy="28" r="28"/></clipPath></defs>'
+            b'<g clip-path="url(#sd-rc)">')
+    return open_tag + defs + inner + b"</g>" + tail
+
+
+@st.cache_data(show_spinner=False)
+def logo_uris_round() -> dict[str, str]:
+    """Like `logo_uris()` but the circle is baked into the SVG — for `st.dataframe`'s canvas
+    ImageColumn, which no stylesheet can round."""
+    out: dict[str, str] = {}
+    if LOGO_DIR.exists():
+        for p in sorted(LOGO_DIR.glob("*.svg")):
+            b64 = base64.b64encode(_round_svg(p.read_bytes())).decode("ascii")
+            out[p.stem] = f"data:image/svg+xml;base64,{b64}"
+    return out
+
+
+@st.cache_data(show_spinner=False)
+def logo_manifest() -> pd.DataFrame:
+    """Per-ticker provenance for the cached logos (ticker, logoid, source, bytes)."""
+    m = LOGO_DIR / "_manifest.csv"
+    return pd.read_csv(m) if m.exists() else pd.DataFrame(
+        columns=["ticker", "logoid", "source", "bytes"])
 
 
 @st.cache_data(show_spinner=False)

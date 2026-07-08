@@ -1,122 +1,193 @@
 """
-fetch_logos.py — one-time (cached) logo fetch for the watchlist / detail hero.
+fetch_logos.py — one-time (cached) DISPLAY-QUALITY logo fetch for the watchlist,
+ranking table and company-detail hero.
 
-For each ticker in logo_domains.TICKER_DOMAINS, download the company's logo mark ONCE via a
-domain-logo service and normalize it to a consistent transparent 128x128 PNG at
-dashboard/logos/{TICKER}.png. Idempotent: an existing, valid file is never re-fetched.
-Failures are EXPECTED for some names and handled gracefully — the app falls back to the
-styled ticker badge for any ticker without a cached logo.
+SOURCE: TradingView's symbol-logo CDN (s3-symbol-logo.tradingview.com).
+Chosen after evaluating the alternatives against OUR 97 tickers:
 
-Providers (Clearbit's free logo API is deprecated/unreachable):
-  1. DuckDuckGo icons  https://icons.duckduckgo.com/ip3/{domain}.ico   (primary)
-  2. Google favicons   https://www.google.com/s2/favicons?domain={domain}&sz=128 (fallback)
+  * TradingView — 97/97 coverage, **vector SVG**, purpose-built symbol logos: a 56x56
+    full-bleed square with the brand colour as background, designed to be clipped to a circle.
+    Crisp at every render size we use (26px table, 40px watchlist, 58px hero). No API key.
+    Keyed by TradingView's own `logoid` slug, resolved per ticker from their public
+    symbol-search endpoint (see `resolve_logoid`). CHOSEN.
+  * logo.dev — returns HTTP 401 without an API token, so coverage/quality for our tickers
+    cannot be assessed without signing up for a key. Rejected: a credential + external
+    dependency for what is a one-time static asset fetch.
+  * Clearbit — logo.clearbit.com no longer resolves (service retired).
+  * DuckDuckGo / Google favicons (the PREVIOUS source) — 16-64px browser-tab icons: blurry
+    when scaled up, square, inconsistently padded. This is what we are replacing.
+
+Two tickers get a PARENT-GROUP mark rather than the subsidiary's own, because that is what
+TradingView itself serves: SK hynix (000660.KS) -> `sk-telecom` (SK Group) and MUFG (8306.T)
+-> `mitsubishi-group`. Confirmed against TradingView's search API — not a resolution error on
+our side. Pin something else in LOGOID_OVERRIDES if you disagree.
+
+Writes dashboard/logos/{TICKER}.svg plus `_manifest.csv` (ticker, logoid, source, bytes).
+Idempotent: an existing file is never re-fetched. A ticker with no logo simply has no file —
+the app falls back to a round, sector-coloured initials badge of the same size.
+
+READ-ONLY on the database (reads ticker + company_name only, to resolve logoids).
 
 USAGE (from repo root or dashboard/):
-    python dashboard/fetch_logos.py            # fetch missing, cache to dashboard/logos/
-    python dashboard/fetch_logos.py --force    # re-fetch all (ignore cache)
-    python dashboard/fetch_logos.py --only AAPL,TSM   # re-fetch specific tickers
+    python dashboard/fetch_logos.py                  # fetch missing
+    python dashboard/fetch_logos.py --force          # re-fetch all
+    python dashboard/fetch_logos.py --only AAPL,TSM  # re-fetch specific tickers
+    python dashboard/fetch_logos.py --report         # print coverage table, write nothing
 """
 from __future__ import annotations
 
-import io
-import sys
+import argparse
+import csv
+import difflib
+import re
+import sqlite3
+import time
 from pathlib import Path
 
 import requests
-from PIL import Image
 
-try:
-    from logo_domains import TICKER_DOMAINS
-except ModuleNotFoundError:  # invoked from repo root
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from logo_domains import TICKER_DOMAINS
-
+ROOT = Path(__file__).resolve().parents[1]
+DB_PATH = ROOT / "data" / "financials.db"
 LOGO_DIR = Path(__file__).resolve().parent / "logos"
-CANVAS = 128            # output square size
-MIN_BYTES = 100         # below this = empty response; real validation is image-based below
-TIMEOUT = 12
-HEADERS = {"User-Agent": "Mozilla/5.0 (SignalDesk logo cache)"}
+MANIFEST = LOGO_DIR / "_manifest.csv"
+
+CDN = "https://s3-symbol-logo.tradingview.com/{logoid}--big.svg"
+SEARCH = ("https://symbol-search.tradingview.com/symbol_search/v3/"
+          "?text={q}&hl=1&lang=en&search_type=stocks&domain=production")
+HEADERS = {"User-Agent": "Mozilla/5.0 (SignalDesk logo cache)",
+           "Origin": "https://www.tradingview.com",
+           "Referer": "https://www.tradingview.com/"}
+TIMEOUT = 15
+
+# Manual pins. Anything listed here skips symbol-search entirely.
+LOGOID_OVERRIDES: dict[str, str] = {
+    # empty — symbol-search resolves all 97 correctly today. Add a ticker to pin its slug.
+}
+
+_TAG = re.compile(r"<[^>]+>")
+_SUFFIX = re.compile(r"\b(inc|corp|corporation|company|co|plc|ltd|limited|group|holdings?|"
+                     r"sa|se|ag|nv|as|a s|class [abc]|the)\b")
 
 
-def providers(domain: str):
-    yield f"https://icons.duckduckgo.com/ip3/{domain}.ico"
-    yield f"https://www.google.com/s2/favicons?domain={domain}&sz=128"
+def _norm(s: str) -> str:
+    s = re.sub(r"[^a-z0-9 ]", " ", (s or "").lower())
+    return re.sub(r"\s+", " ", _SUFFIX.sub(" ", s)).strip()
 
 
-def _normalize(raw: bytes) -> Image.Image | None:
-    """Open bytes as an image, pick the largest frame (for multi-res .ico), and fit it
-    centered onto a transparent CANVAS x CANVAS square without distortion."""
+def _search(q: str) -> list[dict]:
     try:
-        img = Image.open(io.BytesIO(raw))
+        r = requests.get(SEARCH.format(q=requests.utils.quote(q)), headers=HEADERS,
+                         timeout=TIMEOUT)
+        return r.json().get("symbols", []) if r.status_code == 200 else []
+    except Exception:
+        return []
+
+
+def resolve_logoid(ticker: str, name: str) -> tuple[str | None, float]:
+    """Best (logoid, score) for a ticker via TradingView symbol-search.
+
+    Queries the raw ticker, its exchange-stripped base, a dot-variant (BRK-B -> BRK.B, which
+    the plain base does NOT find), and the company name. Each hit is scored by fuzzy-matching
+    OUR company_name against TradingView's description, plus a bonus for an exact symbol
+    match. The name check is what stops a bare-ticker collision picking the wrong company.
+    """
+    if ticker in LOGOID_OVERRIDES:
+        return LOGOID_OVERRIDES[ticker], 99.0
+
+    base = ticker.split(".")[0]
+    queries = [ticker, base]
+    if "-" in base:
+        queries.append(base.replace("-", "."))
+    queries += [name, _norm(name)]
+
+    seen: set[str] = set()
+    best: tuple[str | None, float] = (None, 0.0)
+    for q in queries:
+        if not q or q in seen:
+            continue
+        seen.add(q)
+        for hit in _search(q)[:12]:
+            logoid = hit.get("logoid")
+            if not logoid:
+                continue
+            desc = _TAG.sub("", hit.get("description") or "")
+            sym = _TAG.sub("", hit.get("symbol") or "")
+            score = difflib.SequenceMatcher(None, _norm(name), _norm(desc)).ratio()
+            if sym.upper() == base.upper():
+                score += 0.35
+            if score > best[1]:
+                best = (logoid, score)
+        if best[1] >= 1.0:
+            break
+        time.sleep(0.05)
+    return best
+
+
+def fetch_svg(logoid: str) -> bytes | None:
+    try:
+        r = requests.get(CDN.format(logoid=logoid), headers=HEADERS, timeout=TIMEOUT)
     except Exception:
         return None
-    # multi-frame .ico -> choose the largest frame
-    try:
-        if getattr(img, "n_frames", 1) > 1:
-            best, best_area = img, 0
-            for i in range(img.n_frames):
-                img.seek(i)
-                area = img.size[0] * img.size[1]
-                if area > best_area:
-                    best, best_area = img.copy(), area
-            img = best
-    except Exception:
-        pass
-    img = img.convert("RGBA")
-    if min(img.size) < 16:            # 16px favicons are too small for a clean badge
+    if r.status_code != 200 or b"<svg" not in r.content[:200]:
         return None
-    if img.getextrema()[3][1] == 0:   # fully transparent = blank placeholder
-        return None
-    img.thumbnail((CANVAS, CANVAS), Image.LANCZOS)
-    canvas = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
-    canvas.paste(img, ((CANVAS - img.width) // 2, (CANVAS - img.height) // 2), img)
-    return canvas
+    return r.content
 
 
-def fetch_one(ticker: str, domain: str) -> tuple[bool, str]:
-    for url in providers(domain):
-        try:
-            r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-        except requests.RequestException:
-            continue
-        if r.status_code != 200 or len(r.content) < MIN_BYTES:
-            continue
-        img = _normalize(r.content)
-        if img is None:
-            continue
-        img.save(LOGO_DIR / f"{ticker}.png")
-        return True, url.split("/")[2]  # provider host
-    return False, "—"
+def universe() -> list[tuple[str, str]]:
+    with sqlite3.connect(DB_PATH) as con:      # READ-ONLY
+        return con.execute("SELECT ticker, MAX(company_name) FROM financial_facts "
+                           "GROUP BY ticker ORDER BY ticker").fetchall()
 
 
-def main(argv: list[str]) -> None:
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--force", action="store_true", help="re-fetch even if cached")
+    ap.add_argument("--only", help="comma-separated tickers")
+    ap.add_argument("--report", action="store_true", help="print coverage, write nothing")
+    args = ap.parse_args()
+
     LOGO_DIR.mkdir(exist_ok=True)
-    force = "--force" in argv
-    only = None
-    for a in argv:
-        if a.startswith("--only"):
-            val = a.split("=", 1)[1] if "=" in a else argv[argv.index(a) + 1]
-            only = {t.strip() for t in val.split(",")}
+    rows = universe()
+    if args.only:
+        want = {t.strip().upper() for t in args.only.split(",")}
+        rows = [r for r in rows if r[0].upper() in want]
 
-    items = {t: d for t, d in TICKER_DOMAINS.items() if (only is None or t in only)}
-    got, cached, failed = [], [], []
-    for ticker, domain in sorted(items.items()):
-        dest = LOGO_DIR / f"{ticker}.png"
-        if dest.exists() and not force:
-            cached.append(ticker)
+    manifest: list[tuple] = []
+    real, fallback = 0, []
+    for ticker, name in rows:
+        dest = LOGO_DIR / f"{ticker}.svg"
+        if dest.exists() and not args.force and not args.report:
+            manifest.append((ticker, "(cached)", "tradingview", dest.stat().st_size))
+            real += 1
+            print(f"  {ticker:11s} cached")
             continue
-        ok, src = fetch_one(ticker, domain)
-        (got if ok else failed).append(ticker)
-        print(f"  {ticker:12} {domain:24} {'OK via ' + src if ok else 'FAIL -> badge fallback'}")
 
-    print("\n" + "=" * 60)
-    print(f"logos cached at {LOGO_DIR}")
-    print(f"  fetched now : {len(got)}")
-    print(f"  already cached: {len(cached)}")
-    print(f"  FAILED (fallback to styled badge): {len(failed)}  {failed}")
-    total_ok = len(got) + len(cached)
-    print(f"  coverage: {total_ok}/{len(TICKER_DOMAINS)} tickers have a real logo")
+        logoid, score = resolve_logoid(ticker, name)
+        svg = fetch_svg(logoid) if logoid else None
+        if svg:
+            if not args.report:
+                dest.write_bytes(svg)
+            real += 1
+            src = "override" if ticker in LOGOID_OVERRIDES else "tradingview"
+            manifest.append((ticker, logoid, src, len(svg)))
+            print(f"  {ticker:11s} {logoid:28s} {src:12s} {len(svg):6d}B  score {score:.2f}")
+        else:
+            fallback.append(ticker)
+            manifest.append((ticker, "", "fallback", 0))
+            print(f"  {ticker:11s} {'-':28s} FALLBACK (styled round badge)")
+
+    if not args.report:
+        with MANIFEST.open("w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["ticker", "logoid", "source", "bytes"])
+            w.writerows(manifest)
+
+    print(f"\n=== {real}/{len(rows)} real logos · {len(fallback)} fallback ===")
+    if fallback:
+        print("fallback tickers:", ", ".join(fallback))
+    if not args.report:
+        print(f"manifest -> {MANIFEST}")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()

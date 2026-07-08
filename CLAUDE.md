@@ -681,9 +681,30 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
   [data-testid="stElementContainer"]` is pinned to `flex:0 0 auto` for exactly this reason.
   After ANY layout change here, re-probe click targets with `elementFromPoint`.
 - **Header:** logo | centred (search + 4 nav items, `NAV_GAP`=19px ≈ 0.5cm) | theme toggle.
-  Nav items are borderless until hover; only the active one is accent-filled. No divider under
-  the header. The logo is a click-home target (transparent `logobtn` overlay -> Ranking) and
-  works whether or not a logo file exists.
+  Nav is **plain text** (white on dark / black on light, `P['nav_text']`) with **NO
+  active-state highlight** — outline + tint on hover only. Every nav button is `secondary`;
+  passing `type="primary"` would reintroduce the purple pill because Streamlit fills primary
+  buttons with `theme.primaryColor`. The active view is named by the page's own title, not the
+  nav. No divider under the header. The logo is a click-home target (transparent `logobtn`
+  overlay -> Ranking) and works whether or not a logo file exists.
+- **Company icons: TradingView symbol logos, ROUND, vector.** `dashboard/fetch_logos.py`
+  resolves each ticker to TradingView's `logoid` via their public symbol-search endpoint and
+  caches `dashboard/logos/{TICKER}.svg` (+ `_manifest.csv`). **97/97 coverage, 0 fallbacks.**
+  Rationale, evaluated for this universe: the SVGs are purpose-built 56×56 full-bleed squares
+  with the brand colour as background, meant to be clipped to a circle — one vector asset is
+  crisp at 26px (table), 40px (watchlist) and 58px (hero). The PREVIOUS source was
+  DuckDuckGo/Google favicons: 16–64px browser-tab icons, blurry when scaled, square,
+  inconsistently padded. `logo.dev` was rejected — HTTP 401 without an API token, so a
+  credential + runtime dependency for a one-time static fetch. Clearbit is retired.
+    * `Path.stem` strips only the last suffix, so `SAN.MC.svg` -> `SAN.MC` survives.
+    * Rounding is `border-radius:50%` on our own HTML, but the **Backtest holdings** table is
+      `st.dataframe`'s ImageColumn — a canvas grid CSS cannot reach — so `data.logo_uris_round()`
+      clips the circle into the SVG source itself for that one surface.
+    * TradingView serves a PARENT-GROUP mark for two names, and we keep it because that is
+      what TradingView shows: SK hynix (000660.KS) -> `sk-telecom`, MUFG (8306.T) ->
+      `mitsubishi-group`. Verified against their search API; pin alternatives in
+      `LOGOID_OVERRIDES`. Missing logos fall back to a round sector-coloured initials badge of
+      the same size, so a gap never breaks the layout.
 - **Logo:** drop `dashboard/assets/logo.png` (any aspect ratio; auto-detected, no restart).
   `data.app_logo_uri(mode)` trims transparent padding on an ALPHA THRESHOLD (a plain
   `getbbox()` returns the full canvas — exported PNGs carry a sub-visible halo — which
