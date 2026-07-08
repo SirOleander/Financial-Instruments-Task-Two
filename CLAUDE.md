@@ -656,6 +656,21 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
   at tab level, in `ui.scope_note()` with DERIVED counts (72 trained / 97 ranked / 25
   out-of-sample). Do not reintroduce a per-row flag. The per-company `confidence` tier is
   still shown on **Company Detail**, where it describes one name rather than the whole book.
+  A separate one-line note under the baskets reports how much of the ACTUAL BOOK is
+  out-of-sample ("6 of the 20 picks") — that is summary-level, not per-row, and is kept.
+- **ONE scroll container in the entire app: `.stMain` (the page).** Nothing else scrolls —
+  not the watchlist, not the ranking table. The watchlist is part of the page flow and scrolls
+  off-screen; the top-bar search is how you jump to a company from anywhere. Do not add
+  `max-height` + `overflow-y` back to `.st-key-colist`. Note `overflow-x:hidden` ALONE also
+  creates a scrollport (a non-`visible` value on one axis forces the other to `auto`), so the
+  watchlist relies on the button's own `text-overflow:ellipsis` to clip long tickers.
+- **Sticky goes on the WRAPPER, not the keyed container.** Streamlit wraps a keyed
+  `st.container` in a `stLayoutWrapper` sized to its content, and a sticky element is confined
+  to its containing block — so `position:sticky` on `.st-key-topbar` stuck for 73px and then
+  scrolled away. The rule targets `[data-testid="stLayoutWrapper"]:has(> .st-key-topbar)`,
+  which IS a direct child of the tall page vertical block. Requires `:has()` (Chrome 105+,
+  Safari 15.4+, Firefox 121+). This is load-bearing now the watchlist scrolls with the page:
+  the search box is the only in-view way to reach a company once scrolled.
 
 - **Every headline number is DERIVED from an artifact** — universe size, ablation max, the
   per-rebalance LS sequence, target std, VIF counts. Nothing about "97" is hard-coded, so a

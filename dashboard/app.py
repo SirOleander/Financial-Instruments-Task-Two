@@ -164,6 +164,15 @@ def view_ranking(logos: dict) -> None:
     shorts = df[df["basket"] == "SHORT"]["ticker"].tolist()
     ui.basket_summary(mode, longs, shorts)
 
+    # Summary-level (NOT per-row) honesty line: how much of the actual book is out-of-sample.
+    # The general scope statement above cannot convey this — "6 of the 20 picks" is a concrete
+    # fact about the recommendation itself. All counts derived.
+    n_flag_long = int(df[df["basket"] == "LONG"]["out_of_training_dist"].sum())
+    n_flag_short = int(df[df["basket"] == "SHORT"]["out_of_training_dist"].sum())
+    ui.note(f"<b>{n_flag_long}</b> of the {len(longs)} longs and <b>{n_flag_short}</b> of the "
+            f"{len(shorts)} shorts are out-of-sample names the model never trained on — "
+            f"<b>{n_flag_long + n_flag_short} of the {len(longs) + len(shorts)} picks</b>.")
+
     # Full-page table: every row rendered down the page, no fixed-height widget and no inner
     # scrollbar. st.dataframe cannot do this without its canvas row-selector checkbox column
     # (drawn inside the grid canvas, unreachable from CSS), so the table is an HTML grid with

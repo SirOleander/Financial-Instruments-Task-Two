@@ -113,9 +113,18 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     hr {{ border-color:{P['border_soft']}; }}
 
     /* ---------------- slim top bar ---------------- */
+    /* Sticky must go on the WRAPPER, not on .st-key-topbar. Streamlit wraps a keyed container
+       in a `stLayoutWrapper` sized to its content (73px), and a sticky element is confined to
+       its containing block — so sticking the inner div made it stick for 73px and then scroll
+       away. The wrapper IS a direct child of the tall page vertical block, so it sticks for
+       the whole page. This matters now the watchlist scrolls with the page: the search box is
+       the only way to jump to a company once you've scrolled down. */
+    [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{
+      position:sticky; top:0; z-index:60; background:{P['bg']};
+    }}
     .st-key-topbar {{
       border-bottom:1px solid {P['border']}; padding:10px 4px 8px; margin-bottom:14px;
-      position:sticky; top:0; z-index:50; background:{P['bg']};
+      background:{P['bg']};
     }}
     .st-key-topbar [data-testid="stHorizontalBlock"] {{ align-items:center; }}
     .sd-logo {{ display:flex; align-items:center; gap:11px; }}
@@ -200,9 +209,14 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     .sd-wl-label {{ color:{P['faint']}; font-size:.64rem; letter-spacing:.18em; text-transform:uppercase;
       font-weight:600; margin:2px 2px 8px; display:flex; justify-content:space-between; }}
     .sd-wl-label .ct {{ color:{P['muted']}; }}
-    .st-key-colist {{ max-height:calc(100vh - 210px); overflow-y:auto; overflow-x:hidden; padding-right:5px; }}
-    .st-key-colist::-webkit-scrollbar {{ width:7px; }}
-    .st-key-colist::-webkit-scrollbar-thumb {{ background:{P['border']}; border-radius:4px; }}
+    /* The watchlist scrolls WITH THE PAGE — it is not its own scroll container. There is no
+       inner scrollbar anywhere in the app; .stMain (the page) is the single scroller. Do NOT
+       reintroduce max-height + overflow-y here: the whole column is part of the page flow, so
+       it scrolls off-screen as the user goes down, and the top-bar search is how you jump to a
+       company from anywhere. `overflow-x:hidden` alone would ALSO create a scroll container
+       (any non-visible overflow on one axis makes the other axis a scrollport), so it is gone
+       too — long tickers are clipped by the button's own text-overflow instead. */
+    .st-key-colist {{ padding-right:5px; }}
 
     /* icon tiles: 30px was too small to read a logo — 40px with a tighter crop */
     .st-key-colist [data-testid="stButton"] button {{
@@ -216,6 +230,9 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
       content:""; flex:0 0 auto; width:40px; height:40px; border-radius:9px;
       background:{P['faint']}; border:1px solid transparent;
       box-shadow:0 1px 3px rgba(0,0,0,.18); }}
+    /* clip long tickers at the button — the column no longer has overflow-x to do it */
+    .st-key-colist [data-testid="stButton"] button p {{
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }}
     .st-key-colist [data-testid="stButton"] button:hover {{ background:{P['hover']}; }}
     .st-key-colist [data-testid="stButton"] button[kind="primary"] {{
       background:{P['sel_bg']}; border-left:2px solid {P['sel_bar']}; color:{P['strong']}; font-weight:600; }}
