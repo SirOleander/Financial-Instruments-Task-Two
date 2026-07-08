@@ -83,17 +83,20 @@ def _trim_transparent(raw: bytes) -> tuple[bytes, bool]:
         return raw, False
 
 
-def app_logo_uri(mode: str = "dark") -> tuple[str | None, bool]:
-    """(data_uri, whiten) for the header logo, or (None, False) if no logo.png exists yet
-    (the UI then falls back to the SIGNAL·DESK wordmark placeholder).
+def _logo_sig() -> tuple:
+    """(exists, mtime, size) for each candidate logo file — the cache key below.
 
-    A dark-ink logo is invisible on the navy dark theme. Two escapes, in order:
-      1. drop an `assets/logo_dark.png` — a light-ink variant, used verbatim in dark mode;
-      2. otherwise, if the artwork measures dark, the UI whitens it with a CSS filter.
-    Light mode always uses logo.png untouched.
+    Keying on file identity rather than nothing keeps the original promise (drop a new
+    logo.png in and it appears without a restart) while making the expensive part cacheable."""
+    out = []
+    for name in ("logo.png", "logo_dark.png"):
+        p = ASSETS_DIR / name
+        out.append((p.stat().st_mtime_ns, p.stat().st_size) if p.exists() else None)
+    return tuple(out)
 
-    Deliberately NOT cached: the files are a few KB, and caching would mean dropping in a new
-    logo only took effect after a server restart."""
+
+@st.cache_data(show_spinner=False)
+def _app_logo_uri_cached(mode: str, _sig: tuple) -> tuple[str | None, bool]:
     if mode == "dark":
         dark_variant = ASSETS_DIR / "logo_dark.png"
         if dark_variant.exists():
@@ -106,6 +109,22 @@ def app_logo_uri(mode: str = "dark") -> tuple[str | None, bool]:
     png, is_dark_ink = _trim_transparent(p.read_bytes())
     uri = f"data:image/png;base64,{base64.b64encode(png).decode('ascii')}"
     return uri, (mode == "dark" and is_dark_ink)
+
+
+def app_logo_uri(mode: str = "dark") -> tuple[str | None, bool]:
+    """(data_uri, whiten) for the header logo, or (None, False) if no logo.png exists yet
+    (the UI then falls back to the SIGNAL·DESK wordmark placeholder).
+
+    A dark-ink logo is invisible on the navy dark theme. Two escapes, in order:
+      1. drop an `assets/logo_dark.png` — a light-ink variant, used verbatim in dark mode;
+      2. otherwise, if the artwork measures dark, the UI whitens it with a CSS filter.
+    Light mode always uses logo.png untouched.
+
+    CACHED ON FILE IDENTITY. The trim + per-pixel luminance measurement cost ~27 ms on EVERY
+    rerun of EVERY page. The cache key is (mtime, size) of both candidate files, so dropping in
+    a new logo still takes effect immediately — no restart, which was the reason this was
+    originally left uncached."""
+    return _app_logo_uri_cached(mode, _logo_sig())
 
 
 @st.cache_data(show_spinner=False)
@@ -379,6 +398,41 @@ def company_ohlc(ticker: str) -> pd.DataFrame:
     if len(df):
         df["date"] = pd.to_datetime(df["date"])
     return df
+
+
+@st.cache_data(show_spinner=False)
+def company_ohlc_weekly(ticker: str) -> pd.DataFrame:
+    """Weekly OHLC bars for the detail chart, aggregated from the daily cache.
+
+    ~1,640 daily rows -> ~340 weekly rows. This is a real weekly bar, not a sampled point:
+    open = first open of the week, high = max high, low = min low, close = last close, and
+    `date` is the LAST ACTUAL TRADING DAY in that week (not a synthetic week-end), so the
+    tooltip always names a day the stock really traded. Hover values stay exact — they are
+    aggregates of real prices, never interpolated.
+
+    Why downsample: the hover hit-target needs one invisible mark per datum, so 1,640 points
+    meant thousands of SVG nodes hit-tested on every mousemove. The period-change badge is
+    still computed from the DAILY frame, so it is unaffected by this aggregation."""
+    df = company_ohlc(ticker)
+    if df.empty:
+        return df
+    g = df.groupby(df["date"].dt.to_period("W"))
+    out = g.agg(date=("date", "last"), open=("open", "first"), high=("high", "max"),
+                low=("low", "min"), close=("close", "last")).reset_index(drop=True)
+    return out.dropna(subset=["close"])
+
+
+@st.cache_data(show_spinner=False)
+def ohlc_chart_spec(ticker: str, mode: str) -> dict:
+    """Vega-Lite spec for a company's price chart, built ONCE per (ticker, theme).
+
+    Building the Altair chart and serializing it cost ~85 ms on EVERY Streamlit rerun (47 ms
+    to construct, 38 ms in `to_dict`), for a spec that only depends on the ticker and the
+    palette. Caching the finished spec removes that from the rerun path entirely; the caller
+    renders it with `st.vega_lite_chart`, which skips Altair's serialization step too."""
+    import charts                       # local import: charts imports ui, not data
+    df = company_ohlc_weekly(ticker)
+    return charts.ohlc_price_line(df, mode, date_title="Week ending").to_dict()
 
 
 def period_change(df: pd.DataFrame, col: str = "close") -> float | None:

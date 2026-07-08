@@ -709,6 +709,26 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
   (vertical + horizontal dashed rules), tooltip with Date/Close/Open/High/Low, and a
   green/red period-change badge (colour is earned here — it IS direction — and the sign is in
   the text). No volume bars.
+- **Detail-page PERFORMANCE — three traps, all measured, do not undo:**
+    1. **`opacity=alt.condition(sel, …)` renders a mark for EVERY datum and merely hides it.**
+       Used for the crosshair rule it produced 1,644 invisible SVG nodes, hit-tested on every
+       mousemove. Both crosshair rules now sit behind `transform_filter(hover)`, so each draws
+       exactly ONE mark. SVG elements: **4,971 -> 724**; chart hover cost **98 -> 18 ms/move**
+       (measured against a selenium baseline, old code run from a git worktree).
+    2. **The chart is DOWNSAMPLED to weekly** (`company_ohlc_weekly`, ~1,640 -> ~341 rows) —
+       real OHLC bars (open=first, high=max, low=min, close=last, date = last real trading day
+       of the week), verified against the raw daily rows. The hover is therefore exact, not
+       interpolated. The period-change badge still uses the DAILY frame: weekly-first-close
+       would give +31.0% where the true first->last is +33.4%.
+    3. **`ohlc_chart_spec()` caches the finished Vega spec per (ticker, mode)** and the caller
+       uses `st.vega_lite_chart`. Building + `to_dict`-ing the Altair chart cost ~85 ms on
+       every rerun; spec payload **180 KB -> 40 KB**. Also `app_logo_uri()` is now cached on
+       file identity `(mtime, size)` — it was doing ~27 ms of Pillow trim + per-pixel luminance
+       on EVERY rerun of EVERY page, while still allowing a dropped-in logo to appear with no
+       restart. Median detail-open **879 -> 459 ms**.
+  NOTE: `company_ohlc` was ALREADY `@st.cache_data`-cached and was never the bottleneck
+  (0.1 ms warm); and hovering triggers no Streamlit rerun at all (no Vega selection is bound
+  back to Python). Profile before assuming the loader is at fault.
 - **Display tickers are STRIPPED; the real ticker is always the key.** `data.display_tickers()`
   maps `SHEL.L -> SHEL`, `005930.KS -> 005930` (only the dot-suffix; `BRK-B` and `NOVO-B` keep
   their share class). Used ONLY for rendered text in the Watchlist, the Ranking table and the

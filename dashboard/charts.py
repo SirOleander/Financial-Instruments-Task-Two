@@ -68,7 +68,8 @@ def price_line(df: pd.DataFrame, mode: str, height: int = 250) -> alt.Chart:
     return _themed(alt.layer(area, line).properties(height=height), P)
 
 
-def ohlc_price_line(df: pd.DataFrame, mode: str, height: int = 300) -> alt.Chart:
+def ohlc_price_line(df: pd.DataFrame, mode: str, height: int = 300,
+                    date_title: str = "Date") -> alt.Chart:
     """Close-price line with a hover crosshair and an OHLC tooltip.
 
     Deliberate choices:
@@ -77,8 +78,14 @@ def ohlc_price_line(df: pd.DataFrame, mode: str, height: int = 300) -> alt.Chart
       * The line is neutral `strong`, not green/red. A price LEVEL has no polarity; the
         direction is stated once, in the period-change badge, where green/red is earned.
       * Crosshair = a vertical rule at the hovered date + a horizontal rule at that close,
-        both recessive dashed. The invisible wide `selectors` layer makes the hit target the
-        full plot height, so the tooltip fires anywhere in the column, not just on the line.
+        both recessive dashed, BOTH behind `transform_filter(hover)` so each draws exactly ONE
+        mark. Using `opacity=alt.condition(hover, …)` instead — the obvious idiom — renders a
+        rule for EVERY datum and merely hides them: 1,644 invisible SVG nodes that still get
+        hit-tested on every mousemove. That, plus a per-datum invisible `selectors` rule layer,
+        produced 4,971 SVG elements and made hovering visibly laggy.
+      * The hit target is `mark_point(opacity=0)` — one lightweight symbol per datum, which
+        `nearest` needs. Caller should pass a DOWNSAMPLED (weekly) frame so this is a few
+        hundred nodes, not a few thousand.
       * NO area fill. `mark_area` implicitly sets y2=0, which drags the scale's domain down to
         zero and overrides `zero=False` — the price line then reads as a flat band in the top
         half of the plot. A truncated baseline is correct for a LINE (it encodes position);
@@ -95,18 +102,20 @@ def ohlc_price_line(df: pd.DataFrame, mode: str, height: int = 300) -> alt.Chart
 
     line = base.mark_line(color=P["strong"], strokeWidth=1.6)
 
-    # full-height hit target: carries the selection AND the tooltip
-    selectors = alt.Chart(df).mark_rule(strokeWidth=8, opacity=0).encode(
-        x="date:T",
-        tooltip=[alt.Tooltip("date:T", title="Date", format="%d %b %Y"),
+    # nearest-point hit target + tooltip: N invisible symbols (cheapest per-datum mark)
+    selectors = base.mark_point(size=90, opacity=0).encode(
+        tooltip=[alt.Tooltip("date:T", title=date_title, format="%d %b %Y"),
                  alt.Tooltip("close:Q", title="Close", format=",.2f"),
                  alt.Tooltip("open:Q", title="Open", format=",.2f"),
                  alt.Tooltip("high:Q", title="High", format=",.2f"),
                  alt.Tooltip("low:Q", title="Low", format=",.2f")],
     ).add_params(hover)
 
-    vrule = alt.Chart(df).mark_rule(color=P["muted"], strokeDash=[3, 3], size=1).encode(
-        x="date:T", opacity=alt.condition(hover, alt.value(0.85), alt.value(0)))
+    # each of these renders ONE mark, only while hovering.
+    # vrule is built from a bare Chart (x only, no y) so it spans the full plot height.
+    vrule = (alt.Chart(df).transform_filter(hover)
+             .mark_rule(color=P["muted"], strokeDash=[3, 3], size=1, opacity=.85)
+             .encode(x=alt.X("date:T", title=None)))
     hrule = base.transform_filter(hover).mark_rule(
         color=P["muted"], strokeDash=[3, 3], size=1).encode(y="close:Q")
     point = base.transform_filter(hover).mark_point(

@@ -767,17 +767,21 @@ def view_detail(companies) -> None:
     ui.section("Price · overview")
     ohlc = data.company_ohlc(tk)
     if len(ohlc):
+        # badge uses the DAILY series (exact first->last close); the chart is weekly bars
         chg = data.period_change(ohlc, "close")
         span = f"{ohlc['date'].min():%b %Y} – {ohlc['date'].max():%b %Y}"
         if chg is not None:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:12px;margin:2px 0 10px;">'
                 f'{ui.change_badge(mode, chg, span)}</div>', unsafe_allow_html=True)
-        st.altair_chart(charts.ohlc_price_line(ohlc, mode), width="stretch")
-        ui.note("Daily close, unadjusted, in the stock's own listing currency (London names "
-                "are in GBp). Hover for date and OHLC. <b>Display only</b> — this series is "
-                "cached separately and is never used by the model; the target is built from "
-                "the adjusted-close series in <code>daily_prices</code>.")
+        # cached spec + st.vega_lite_chart: keeps ~85ms of Altair build+serialize off the
+        # rerun path (see data.ohlc_chart_spec)
+        st.vega_lite_chart(data.ohlc_chart_spec(tk, mode), width="stretch")
+        ui.note("Weekly bars aggregated from unadjusted daily prices, in the stock's own "
+                "listing currency (London names are in GBp). Hover for the week-ending date "
+                "and its OHLC. <b>Display only</b> — this series is cached separately and is "
+                "never used by the model; the target is built from the adjusted-close series "
+                "in <code>daily_prices</code>.")
     else:
         px = data.company_prices(tk)          # graceful fallback: adjusted close
         if len(px):
