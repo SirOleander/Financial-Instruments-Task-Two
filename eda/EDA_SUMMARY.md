@@ -10,35 +10,35 @@ Forward-return prediction is intrinsically low-signal; weak correlations are exp
 
 | feature | n | pearson | spearman |
 |---|---|---|---|
-| net_margin_change | 1314 | +0.0618 | +0.0784 |
-| ROIC_change | 1050 | +0.0252 | +0.0515 |
-| operating_margin_change | 1134 | +0.0671 | +0.0502 |
-| return_on_assets_change | 1314 | +0.0193 | +0.0478 |
-| net_income_growth_yoy | 1170 | +0.0352 | +0.0470 |
-| gross_margin_change | 989 | +0.0212 | +0.0436 |
+| net_margin_change | 1314 | +0.0618 | +0.0782 |
+| ROIC_change | 1050 | +0.0256 | +0.0510 |
+| operating_margin_change | 1134 | +0.0677 | +0.0505 |
+| net_income_growth_yoy | 1170 | +0.0364 | +0.0483 |
+| return_on_assets_change | 1314 | +0.0199 | +0.0479 |
+| gross_margin_change | 989 | +0.0213 | +0.0435 |
 
 Strongest **negative** Spearman:
 
 | feature | n | pearson | spearman |
 |---|---|---|---|
-| operating_income_growth_yoy_change | 886 | -0.0021 | -0.0580 |
-| equity_ratio | 1239 | -0.0504 | -0.0568 |
-| return_on_assets | 1314 | -0.0226 | -0.0540 |
-| asset_turnover | 1314 | -0.0115 | -0.0529 |
-| gross_margin | 989 | -0.0506 | -0.0399 |
-| return_on_equity | 1239 | -0.0216 | -0.0377 |
+| operating_income_growth_yoy_change | 886 | -0.0018 | -0.0582 |
+| equity_ratio | 1239 | -0.0475 | -0.0548 |
+| return_on_assets | 1314 | -0.0218 | -0.0546 |
+| asset_turnover | 1314 | -0.0117 | -0.0520 |
+| gross_margin | 989 | -0.0507 | -0.0404 |
+| return_on_equity | 1239 | -0.0218 | -0.0388 |
 
-**Max |Spearman| among well-populated features = +0.0784 (net_margin_change, n=1314) — essentially no univariate signal.** This is the expected, informative result: rely on multivariate + ensemble models, not any single feature.
+**Max |Spearman| among well-populated features = +0.0782 (net_margin_change, n=1314) — essentially no univariate signal.** This is the expected, informative result: rely on multivariate + ensemble models, not any single feature.
 
 
 **CAUTION — ignore these as leaders:** the raw top-|Spearman| is dominated by sparse, sector-specific features computed on small non-representative subsamples, NOT deployable signal:
 
 | feature | n | spearman |
 |---|---|---|
-| net_interest_margin | 144 | -0.1307 |
-| net_interest_margin_change | 144 | -0.1043 |
+| net_interest_margin | 144 | -0.1292 |
+| net_interest_margin_change | 144 | -0.1061 |
 | capital_retention | 32 | -0.0792 |
-| inventory_turnover_change | 280 | +0.0552 |
+| inventory_turnover_change | 280 | +0.0564 |
 
 ## 2. Redundancy / collinearity
 
@@ -126,14 +126,14 @@ Drivers: sparse sector-specific KPIs (net_interest_margin, capital_retention ban
 
 ## 5. Target
 
-future_63d_sharpe (train, winsorized): median=+0.743, mean=+0.831, std=1.979. See target_by_sector.csv / fig_target_by_sector.png for sector dispersion — some sectors sit systematically above/below zero in-sample (a look-ahead caution: do NOT hardcode sector means into features).
+future_63d_sharpe (train, winsorized): median=+0.662, mean=+0.752, std=1.976. See target_by_sector.csv / fig_target_by_sector.png for sector dispersion — some sectors sit systematically above/below zero in-sample (a look-ahead caution: do NOT hardcode sector means into features).
 
 Lag-1 autocorrelation of a company's consecutive forward Sharpes:
 
 | frequency | n_pairs | lag1_pearson |
 |---|---|---|
-| quarterly | 954 | -0.0354 |
-| annual | 216 | -0.0676 |
+| quarterly | 954 | -0.0357 |
+| annual | 216 | -0.0646 |
 
 Non-trivial serial correlation => consecutive same-company rows are NOT independent. Use a **time-based split** (already planned) and consider grouping by company to avoid train/test leakage across adjacent windows.
 

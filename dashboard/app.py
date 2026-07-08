@@ -621,12 +621,15 @@ def view_backtest(logos: dict) -> None:
                 '<div class="sd-view-sub">Walk-forward top-10 long / bottom-10 short over the '
                 'held-out test year.</div>', unsafe_allow_html=True)
 
+    per = data.load_backtest_periods()
+    rf = data.risk_free_annual()
     ui.note("<b>A test of the pipeline, not a claim of alpha.</b> The ensemble is frozen on "
             "pre-test data and applied forward to each quarterly rebalance. Equal-weight "
-            "top-10 long / bottom-10 short, ~63-day hold, risk-free = 0. With only 4 "
+            f"top-10 long / bottom-10 short, ~63-day hold, risk-free = {rf:.0%} annualized "
+            "(3-month T-bill, FRED TB3MS). The book is dollar-neutral and self-financing, so "
+            "the rf earned on the short proceeds cancels the rf charged on the spread — the "
+            f"long–short Sharpe is unchanged by it. With only {len(per)} "
             "rebalances the statistics are high-variance — read direction, not precision.")
-
-    per = data.load_backtest_periods()
     summ = data.load_backtest_summary()
 
     # transaction-cost control -> drives tiles + the long-short curve
@@ -646,15 +649,15 @@ def view_backtest(logos: dict) -> None:
     ])
 
     # ---- equity curve ----
-    ui.section("Equity curve · growth of $1")
+    ui.section("Equity curve · cumulative return")
     net_ls = per["gross_ls"] - (cost / 1e4) * per["traded_notional_oneway"]
     pts = ["Start"] + per["period"].tolist()
     cl = cs = cx = 1.0
-    long_eq, short_eq, ls_eq = [1.0], [1.0], [1.0]
+    long_eq, short_eq, ls_eq = [0.0], [0.0], [0.0]
     for i in range(len(per)):
-        cl *= 1 + per["long_ret"].iloc[i]; long_eq.append(cl)
-        cs *= 1 + per["short_ret"].iloc[i]; short_eq.append(cs)
-        cx *= 1 + net_ls.iloc[i]; ls_eq.append(cx)
+        cl *= 1 + per["long_ret"].iloc[i]; long_eq.append(cl - 1.0)
+        cs *= 1 + per["short_ret"].iloc[i]; short_eq.append(cs - 1.0)
+        cx *= 1 + net_ls.iloc[i]; ls_eq.append(cx - 1.0)
     tidy = pd.concat([
         pd.DataFrame({"Point": pts, "Series": "Long basket", "Value": long_eq}),
         pd.DataFrame({"Point": pts, "Series": "Short basket", "Value": short_eq}),
@@ -662,10 +665,20 @@ def view_backtest(logos: dict) -> None:
     ])
     cmap = {"Long basket": P["up"], "Short basket": P["down"], "Long–Short (net)": P["strong"]}
     st.altair_chart(charts.equity_lines(tidy, mode, pts, cmap, height=300), width="stretch")
-    ui.note(f"Both baskets rose with a strong market (long +{long_eq[-1]-1:.0%}, short basket "
-            f"+{short_eq[-1]-1:.0%}); the long–short spread nets to {ls_eq[-1]-1:+.1%} — no "
-            "edge. The short <i>basket</i> is shown as its own return; a short position "
-            "profits when it falls.")
+    # DERIVED, sign-safe: never assert "no edge" from a hardcoded sign — the per-rebalance
+    # spread flips, and that (not the cumulative sign) is what makes it indistinguishable
+    # from noise. A pipeline rerun must not be able to leave this sentence false.
+    n_pos = int((per["gross_ls"] > 0).sum())
+    flips = n_pos not in (0, len(per))
+    ui.note(f"Long basket {long_eq[-1]:+.0%}, short basket {short_eq[-1]:+.0%} "
+            f"(both carried by a strong market); the long–short spread nets to {ls_eq[-1]:+.1%}. "
+            + (f"The per-rebalance spread <b>flips sign</b> ({n_pos} of {len(per)} positive), so "
+               "over this many rebalances it is not distinguishable from noise. "
+               if flips else
+               f"All {len(per)} rebalances share the same sign, but {len(per)} points cannot "
+               "establish an edge. ")
+            + "The short <i>basket</i> is shown as its own return; a short position "
+              "profits when it falls.")
 
     # ---- per-rebalance table ----
     ui.section("Per-rebalance long-short")
@@ -720,14 +733,20 @@ def view_backtest(logos: dict) -> None:
     with st.expander("Reference figure (matplotlib equity curve)"):
         st.image(str(data.PRED_DIR / "fig_backtest_equity.png"), width="stretch")
 
-    # derived from backtest_periods.csv — never hard-coded, so it can't go stale on a rerun
+    # derived from backtest_periods.csv — never hard-coded, so it can't go stale on a rerun.
+    # NB: the cumulative sign is NOT the evidence. With this few rebalances the mean sits well
+    # inside one standard deviation, so state THAT (it stays true whichever way the sum lands).
     seq = ", ".join(f"{v:+.0%}" for v in per["gross_ls"])
     n_flip = int((per["gross_ls"] > 0).sum())
+    g = per["gross_ls"]
+    tstat = g.mean() / (g.std(ddof=1) / len(g) ** 0.5) if g.std(ddof=1) > 0 else 0.0
     ui.note(f"<b>Honest read:</b> per-rebalance long-short flips sign ({seq}) with no "
-            f"persistence — {n_flip} of {len(per)} quarters positive. Over {len(per)} quarters "
-            "the strategy adds no spread. Consistent with the near-null model and market "
-            "efficiency — the backtest confirms the pipeline runs end-to-end and leak-free, "
-            "nothing more.")
+            f"persistence — {n_flip} of {len(per)} quarters positive. The mean quarterly spread "
+            f"is {g.mean():+.1%} against a standard deviation of {g.std(ddof=1):.1%} "
+            f"(t = {tstat:+.2f} on {len(per) - 1} d.f.), i.e. <b>not distinguishable from "
+            "zero</b> — whatever sign the cumulative figure happens to take. Consistent with "
+            "the near-null model and market efficiency: the backtest confirms the pipeline runs "
+            "end-to-end and leak-free, nothing more.")
 
 
 def view_detail(companies) -> None:

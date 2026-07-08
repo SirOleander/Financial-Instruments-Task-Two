@@ -7,14 +7,35 @@ ticker's OWN daily_prices series (its own exchange calendar):
     (63 rows). If fewer than 63 trading days exist after release, target = NULL
     and the pair is FLAGGED (recent report, no full forward window).
   - daily_returns   = adjusted_close.pct_change() within the window (62 returns)
-  - future_63d_return     = close[t+63] / close[t+1] - 1
+  - future_63d_return     = close[t+63] / close[t+1] - 1   (RAW price return, never excess)
   - future_63d_volatility = std(daily_returns)              (sample std, ddof=1)
-  - future_63d_sharpe     = mean(daily_returns) / std(daily_returns) * sqrt(252)
-    RISK-FREE = 0 (stated). Sharpe is the modelling target.
+  - future_63d_sharpe     = mean(daily_returns - rf_daily) / std(daily_returns) * sqrt(252)
+    EXCESS Sharpe over a CONSTANT risk-free rate. Sharpe is the modelling target.
+
+RISK-FREE RATE (A_config.RISK_FREE_RATE_ANNUAL = 0.02, the single definition; see the
+rationale + FRED TB3MS source there). FREQUENCY CONVERSION — the rate is ANNUALIZED, the
+returns are DAILY, so the raw 2% is NEVER subtracted from a daily (or 63-day) return:
+
+    rf_daily = RISK_FREE_RATE_ANNUAL / 252            (simple, matching the arithmetic
+                                                       sqrt(252) annualization below)
+    excess_d = daily_returns - rf_daily               (subtracted PER DAY, before mean/std)
+    sharpe   = mean(excess_d) / std(excess_d) * sqrt(252)
+
+std(excess_d) == std(daily_returns) exactly, because rf_daily is a CONSTANT and subtracting
+a constant does not change dispersion. `future_63d_volatility` is therefore unchanged by the
+rf, and the whole change collapses to the closed form
+
+    sharpe_rf  =  sharpe_rf0  -  RISK_FREE_RATE_ANNUAL / annualized_vol
+    where annualized_vol = future_63d_volatility * sqrt(252)
+
+which is the audit identity used to verify this change. NOTE it is NOT a constant shift: the
+penalty is inversely proportional to each name's volatility, so low-vol names are penalized
+MORE. Rank ordering therefore changes slightly (it is not a pure monotone transform).
 
 Results go in a NEW table `target_63d` keyed on (ticker, report_release_date),
 carrying fiscal_period_end_date + source for later joins. NEVER touches
-financial_facts. Idempotent: INSERT OR REPLACE on the key.
+financial_facts. Idempotent: INSERT OR REPLACE on the key. `future_63d_sharpe_rf0` (the
+pre-rf value) and `risk_free_annual` are persisted alongside as an audit trail.
 
 USAGE (run from inside src/):
     python price_target.py            # DRY-RUN: compute + report + self-check, no writes
@@ -28,10 +49,14 @@ import statistics
 import sys
 from contextlib import closing
 
+import A_config
 import B_database
 
-TRADING_DAYS_PER_YEAR = 252
+TRADING_DAYS_PER_YEAR = A_config.TRADING_DAYS_PER_YEAR
 WINDOW = 63  # forward trading-day window length (rows t+1 .. t+63)
+
+RISK_FREE_ANNUAL = A_config.RISK_FREE_RATE_ANNUAL
+RF_DAILY = A_config.risk_free_per_period(TRADING_DAYS_PER_YEAR)  # 0.02 / 252
 
 
 def create_target_table() -> None:
@@ -49,12 +74,20 @@ def create_target_table() -> None:
                 future_63d_return       REAL,
                 future_63d_volatility   REAL,
                 future_63d_sharpe       REAL,
+                future_63d_sharpe_rf0   REAL,
+                risk_free_annual        REAL,
                 status                  TEXT,
                 created_at              TEXT DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (ticker, report_release_date)
             )
             """
         )
+        # additive migration for a table created before the rf change (CREATE IF NOT EXISTS
+        # no-ops on an existing table, so the two audit columns must be ALTERed in)
+        have = {r["name"] for r in con.execute("PRAGMA table_info(target_63d)")}
+        for col in ("future_63d_sharpe_rf0", "risk_free_annual"):
+            if col not in have:
+                con.execute(f"ALTER TABLE target_63d ADD COLUMN {col} REAL")
         con.commit()
 
 
@@ -103,28 +136,41 @@ def compute_one(release: str, dates: list[str], closes: list[float]) -> dict:
             "future_63d_return": None,
             "future_63d_volatility": None,
             "future_63d_sharpe": None,
+            "future_63d_sharpe_rf0": None,
+            "risk_free_annual": RISK_FREE_ANNUAL,
             "status": "insufficient_window",
         }
 
     window = closes[i0:i0 + WINDOW]              # 63 prices
     daily_returns = [window[k] / window[k - 1] - 1 for k in range(1, WINDOW)]  # 62 returns
-    mean_r = statistics.fmean(daily_returns)
+    # EXCESS daily returns: the annualized rf is frequency-converted to DAILY first, then
+    # subtracted from EACH day. Never subtract the annual 2% from a daily/63-day return.
+    excess_returns = [r - RF_DAILY for r in daily_returns]
+    mean_excess = statistics.fmean(excess_returns)
+    # std(excess) == std(raw): subtracting a constant does not change dispersion. Volatility
+    # is reported on the RAW returns (it is a property of the price series, not of the rf).
     vol = statistics.stdev(daily_returns)         # sample std (ddof=1)
-    sharpe = (mean_r / vol) * math.sqrt(TRADING_DAYS_PER_YEAR) if vol > 0 else None
+    ann = math.sqrt(TRADING_DAYS_PER_YEAR)
+    sharpe = (mean_excess / vol) * ann if vol > 0 else None
+    sharpe_rf0 = (statistics.fmean(daily_returns) / vol) * ann if vol > 0 else None
     return {
         "t1_date": dates[i0],
         "t63_date": dates[i0 + WINDOW - 1],
         "n_forward_days": WINDOW,
-        "future_63d_return": window[-1] / window[0] - 1,
+        "future_63d_return": window[-1] / window[0] - 1,   # RAW price return (not excess)
         "future_63d_volatility": vol,
         "future_63d_sharpe": sharpe,
+        "future_63d_sharpe_rf0": sharpe_rf0,
+        "risk_free_annual": RISK_FREE_ANNUAL,
         "status": "ok" if sharpe is not None else "zero_volatility",
     }
 
 
 def main(write: bool = False) -> None:
     mode = "WRITE (create table + upsert)" if write else "DRY-RUN (compute + report, no writes)"
-    print(f"price_target — STAGE 3 — {mode}   [risk-free = 0]\n" + "=" * 84)
+    print(f"price_target — STAGE 3 — {mode}\n" + "=" * 84)
+    print(f"risk-free = {RISK_FREE_ANNUAL:.2%} annualized (3-month T-bill proxy, FRED TB3MS) "
+          f"-> rf_daily = {RISK_FREE_ANNUAL:.4f}/{TRADING_DAYS_PER_YEAR} = {RF_DAILY:.9f}")
 
     series = load_price_series()
     reports = load_reports()
@@ -183,10 +229,22 @@ def main(write: bool = False) -> None:
     # ---- distribution of sharpe ----
     sharpes = sorted(r["future_63d_sharpe"] for r in ok)
     if sharpes:
-        print("\n--- future_63d_sharpe distribution (real targets) ---")
+        print(f"\n--- future_63d_sharpe distribution (real targets, rf={RISK_FREE_ANNUAL:.0%}) ---")
         print(f"  n={len(sharpes)}  min={sharpes[0]:+.3f}  "
               f"median={statistics.median(sharpes):+.3f}  max={sharpes[-1]:+.3f}  "
               f"mean={statistics.fmean(sharpes):+.3f}")
+        s0 = sorted(r["future_63d_sharpe_rf0"] for r in ok)
+        print(f"  (rf=0 reference: median={statistics.median(s0):+.3f}  "
+              f"mean={statistics.fmean(s0):+.3f})")
+
+    # ---- AUDIT IDENTITY: sharpe_rf == sharpe_rf0 - rf_annual / annualized_vol, exactly ----
+    worst = 0.0
+    for r in ok:
+        ann_vol = r["future_63d_volatility"] * math.sqrt(TRADING_DAYS_PER_YEAR)
+        worst = max(worst, abs(r["future_63d_sharpe"]
+                               - (r["future_63d_sharpe_rf0"] - RISK_FREE_ANNUAL / ann_vol)))
+    print(f"\n--- AUDIT: max |sharpe_rf - (sharpe_rf0 - rf/ann_vol)| over {len(ok)} rows "
+          f"= {worst:.2e}  ({'PASS' if worst < 1e-9 else 'FAIL'})")
 
     if not write:
         print("\nDRY-RUN complete. Nothing written. Re-run with --write to persist targets.")
@@ -202,14 +260,16 @@ def main(write: bool = False) -> None:
             INSERT OR REPLACE INTO target_63d
               (ticker, report_release_date, fiscal_period_end_date, source,
                t1_date, t63_date, n_forward_days,
-               future_63d_return, future_63d_volatility, future_63d_sharpe, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               future_63d_return, future_63d_volatility, future_63d_sharpe,
+               future_63d_sharpe_rf0, risk_free_annual, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (r["ticker"], r["report_release_date"], r["fiscal_period_end_date"],
                  r["source"], r["t1_date"], r["t63_date"], r["n_forward_days"],
                  r["future_63d_return"], r["future_63d_volatility"],
-                 r["future_63d_sharpe"], r["status"])
+                 r["future_63d_sharpe"], r["future_63d_sharpe_rf0"],
+                 r["risk_free_annual"], r["status"])
                 for r in results
             ],
         )

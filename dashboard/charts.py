@@ -294,22 +294,25 @@ def importance_bar(df: pd.DataFrame, cat: str, val: str, mode: str, *, x_title: 
 
 def equity_lines(df: pd.DataFrame, mode: str, order: list[str],
                  color_map: dict[str, str], height: int = 300) -> alt.Chart:
-    """Multi-series 'growth of $1' line chart. df tidy: [Point, Series, Value]. A dashed
-    rule at 1.0 marks break-even. Series colours are passed explicitly (green/red are
-    legitimate here — this is real long/short performance)."""
+    """Multi-series cumulative-return line chart. df tidy: [Point, Series, Value], Value a
+    fractional cumulative return (0.0 = break-even, 0.20 = +20%). A dashed rule at 0 marks
+    break-even. Series colours are passed explicitly (green/red are legitimate here — this
+    is real long/short performance)."""
     P = ui.palette(mode)
     base = alt.Chart(df)
-    one = (alt.Chart(pd.DataFrame({"y": [1.0]}))
+    one = (alt.Chart(pd.DataFrame({"y": [0.0]}))
            .mark_rule(color=P["faint"], strokeDash=[4, 4], size=1).encode(y="y:Q"))
     line = base.mark_line(strokeWidth=2.5, point=alt.OverlayMarkDef(size=42, filled=True)).encode(
         x=alt.X("Point:N", sort=order, title=None,
                 axis=alt.Axis(labelFont="IBM Plex Mono", labelAngle=0)),
-        y=alt.Y("Value:Q", title="growth of $1", scale=alt.Scale(zero=False, nice=True)),
+        y=alt.Y("Value:Q", title="cumulative return", scale=alt.Scale(zero=False, nice=True),
+                axis=alt.Axis(labelExpr="(datum.value > 0 ? '+' : '') "
+                                        "+ format(datum.value, '.0%')")),
         color=alt.Color("Series:N",
                         scale=alt.Scale(domain=list(color_map), range=list(color_map.values())),
                         legend=alt.Legend(orient="top", title=None, labelColor=P["text"],
                                           symbolType="stroke")),
         tooltip=[alt.Tooltip("Series:N", title=""), alt.Tooltip("Point:N", title=""),
-                 alt.Tooltip("Value:Q", format=".3f", title="growth of $1")],
+                 alt.Tooltip("Value:Q", format="+.1%", title="cumulative return")],
     )
     return _themed(alt.layer(one, line).properties(height=height), P)

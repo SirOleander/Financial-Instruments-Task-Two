@@ -121,13 +121,65 @@ NOTE: superseded — universe is now 98 (see the 89→98 milestone above). Origi
 - **target_63d** (PK (ticker, report_release_date); has fiscal_period_end_date, source).
   src/price_target.py. t+1 = first trading day strictly AFTER release on each stock's
   OWN calendar (count 63 ROWS forward in that stock's own series — never a shared US
-  calendar). future_63d_sharpe = mean(daily ret t+1..t+63)/std·√252, risk-free = 0
-  (stated simplification; negligible effect on within-period rankings). 1,573 real
-  targets + 89 NULL (each company's most-recent report, forward window incomplete —
-  fill naturally on idempotent re-run). Sharpe median +0.74, range −5.56…+7.49.
+  calendar). future_63d_sharpe = mean(daily ret − rf_daily)/std·√252 — an EXCESS Sharpe over
+  a CONSTANT risk-free rate (see the RISK-FREE RATE block below; superseded the old rf=0).
+  1,573 real targets + 89 NULL (each company's most-recent report, forward window incomplete —
+  fill naturally on idempotent re-run). At rf=2%: 1,599 real + 91 NULL on the 97, Sharpe
+  median +0.657, range −5.60…+7.32 (was median +0.740 / −5.56…+7.49 at rf=0).
   CAUTION for modelling: extreme Sharpe tails may be low-vol-window artifacts —
   consider winsorizing the target tails and sanity-check a couple of extremes for
   near-zero-std denominators.
+
+================================================================================
+## RISK-FREE RATE — rf = 2% CONSTANT. Applied to BOTH Sharpes, at DIFFERENT frequencies.
+================================================================================
+**Single definition: `A_config.RISK_FREE_RATE_ANNUAL = 0.02`** + `A_config.risk_free_per_period
+(periods_per_year)`. Imported by `price_target.py` and `K_backtest.py`. Never redefine locally.
+
+- **Source/rationale (state in the report):** ≈ the average 3-month US Treasury bill yield
+  (FRED series TB3MS, https://fred.stlouisfed.org/series/TB3MS) over the 2020–2026 sample,
+  rounded to a clean 2%. The 3-month bill is the standard academic risk-free proxy. A CONSTANT
+  (not a time-varying series) is a stated simplification.
+- **FREQUENCY CONVERSION is the whole correctness risk.** The rate is quoted ANNUALIZED; it
+  must be converted to the horizon of each Sharpe. The raw 2% is NEVER subtracted from a daily
+  or a 63-day return. Both consumers annualize ARITHMETICALLY (`mean·N / std·√N`), so the
+  per-period rf is the SIMPLE division `rf/N`, **not** geometric `(1+rf)^(1/N)−1`:
+    * **Target** (`price_target.py`): `rf_daily = 0.02/252 = 0.000079365`, subtracted from
+      EACH daily return before mean/std. `sharpe = mean(r − rf_daily)/std(r)·√252`. Consistency
+      check: `mean_d/std_d·√252 == (252·mean_d)/(std_d·√252) == ann_return/ann_vol`, so
+      subtracting rf/252 per day yields exactly `(ann_return − rf)/ann_vol`.
+    * **Backtest** (`K_backtest.py`): the return series is one obs per ~63-trading-day
+      rebalance, so `PERIODS_PER_YEAR = 252/63 = 4` and `RF_PERIOD = 0.02/4 = 0.005`.
+- **`std(excess) ≡ std(raw)`** — subtracting a constant cannot change dispersion. So
+  `future_63d_volatility` and `future_63d_return` (a RAW price return, never excess) are
+  UNCHANGED by rf, and the target change collapses to the AUDIT IDENTITY:
+
+      sharpe_rf = sharpe_rf0 − RISK_FREE_RATE_ANNUAL / ann_vol      (ann_vol = vol_d·√252)
+
+  Verified to 1.78e-15 across all 1,599 rows. Persisted for audit: new `target_63d` columns
+  `future_63d_sharpe_rf0` (pre-rf value) and `risk_free_annual` (added by guarded ALTER TABLE).
+- **THE SHIFT IS NOT CONSTANT — do NOT claim "a constant shift preserves ranks".** The penalty
+  is `−rf/ann_vol`, i.e. inversely proportional to volatility, so LOW-vol names are penalized
+  HARDER: TD.TO (ann_vol 0.09) shifts −0.222 while APP (ann_vol 1.11) shifts −0.018 — a 12×
+  spread. Range −0.222…−0.018, median −0.075. The target is therefore NOT a monotone transform
+  of the rf=0 target: Spearman(old,new) = 0.99984, and 1,465 of 1,599 rows changed global rank.
+  This is CORRECT Sharpe behaviour (a low-vol name clears the same 2% hurdle with less vol to
+  divide by). The null survives because there was never signal — NOT because ranks are preserved.
+- **BACKTEST: rf CANCELS on the long-short book, by construction.** The book is dollar-neutral
+  and self-financing — the short proceeds fund the long leg and earn rf. That credit exactly
+  offsets the rf subtracted to form an excess return:
+
+      net_p    = (long_p − short_p) + RF_PERIOD − cost_p
+      excess_p = net_p − RF_PERIOD = long_p − short_p − cost_p
+
+  ⇒ **`ann_sharpe_LS` is UNCHANGED by rf.** This cancellation is a RESULT of the structure, not
+  an omission. `ann_sharpe_LS_funded` is reported alongside as a SENSITIVITY only (naive
+  fully-funded book, `excess_p = gross_ls_p − cost_p − 0.005`); it is strictly more pessimistic
+  and is NOT the headline. Equity curves compound the self-financing net.
+- Firewall proven at the change: backup `data/financials.db.bak_before_rf` (pre-change db md5
+  `60aa6798…`); table-by-table hash showed **only `target_63d` changed** (then `modelling_data`
+  on rebuild). `daily_prices` / `financial_facts` / `kpi_values` / `scores` / `operative_scores`
+  byte-identical. `ohlc_display.db` never opened; `daily_ohlc` absent from financials.db.
 
 ### STATUS: data acquisition DONE. Next = the ANALYTICAL pipeline (none built yet)
 1. **KPIs** from raw fundamentals (ratios per PROJECT_SPEC §2.3). Zero-denominator /
@@ -239,14 +291,32 @@ SELECTION of existing modelling_data columns (NOT a schema change):
 forward 63-day Sharpe on this universe/period. This is the RESULT, not a bug — do NOT try to
 tune it into a positive one.** It is exactly what market efficiency predicts, and the
 DELIVERABLE is the leak-free end-to-end methodology, not alpha. Preserve this conclusion.
-- **NULL HOLDS ON THE FINAL 97** (retrained after the GOOG dedup; these are the CURRENT
-  numbers): train+val 1025 rows / 72 companies, test 289. CV Spearman ∈ [−0.031,+0.012]
-  (Lasso/EN still degenerate to null); ensemble test Spearman −0.019; ablation max |CV|=0.034.
-  Backtest (4 quarterly rebalances) long-short +0.18/−0.05/−0.20/+0.08, cum −2.4% gross
-  (−3.6% @10bps), ann Sharpe ~0.05 (0.01 @10bps), maxDD −24%; both legs +~47% in the bull
-  market, no spread. The null is robust to the 89→98 expansion AND to the GOOG dedup.
+- **NULL HOLDS ON THE 97 AT rf=2%** (retrained on the excess-Sharpe target; these are the
+  CURRENT numbers): train+val 1025 rows / 72 companies, test 289, 48 features. CV Spearman ∈
+  [−0.032,+0.012] (Lasso/EN still degenerate to the constant/null model); ensemble test
+  Spearman (pooled) −0.022, per-period +0.012; ablation max |CV|=0.034, max |test|=0.062.
   predictions_all89.csv (filename kept for dashboard) holds all **97** with flags
   out_of_training_dist / prediction_only (25) / no_release_date (5).
+- **BACKTEST P&L FLIPPED SIGN under the rf change — and THAT IS THE POINT. Do NOT present the
+  new positive number as an edge.** Per-rebalance LS +17.7%/−4.7%/−11.6%/+13.6%, cum **+12.6%
+  gross (+11.4% @10bps)**, ann Sharpe **+0.49** (self-financing; fully-funded sensitivity
+  +0.42), maxDD −16.3%. The rf=0 run gave cum **−2.4% / Sharpe ~0.05** on the SAME universe,
+  features, split and code. A target perturbation of **Spearman 0.9998** swung the cumulative
+  P&L by ~14 points because the ensemble refit → different top-10/bottom-10 books. That
+  instability is DIRECT EVIDENCE the backtest P&L carries no information. Statistically:
+  mean quarterly spread +3.75% vs sd 14.14%, **t = +0.53 on 3 d.f. (p ≈ 0.66)**, 95% CI on the
+  mean spread [−19.1%, +26.0%] — contains zero; the sign still FLIPS 2-of-4. Both legs rose
+  (+64% long / +44% short) in a bull market (universe +42%). rf CANCELS on the LS book, so the
+  Sharpe change is entirely the reordered target, not the rf arithmetic.
+- **The MODEL null is unmoved:** CV/test Spearman ≈ 0, Lasso/EN still select 0/48 features,
+  ablation flat, classification still at chance (test AUC 0.449–0.542, CV AUC 0.474–0.523).
+  The null is robust to the 89→98 expansion, the GOOG dedup, AND the rf=0→2% target change.
+- **TEST-SET TOUCH #3.** The regression touched the test set once; the classification lens a
+  second time; this rf retrain is a THIRD touch. All under the SAME pre-committed protocol
+  (features, models, grids, metrics, split fixed before looking) — no iterative tuning against
+  test, and the rf change was mandated externally, not chosen after seeing a result. The
+  expected outcome (null holds) was stated in writing BEFORE the retrain was run. Keep
+  disclosing the touch count.
 - Numbers below are the ORIGINAL 89-run (kept for reference; superseded by the 97 line above).
 - **Pipeline (J_models.py):** time split at 2025-03-31 (train+val 1023 rows ≤ split; untouched
   12-month test 285 rows > split, touched once). TimeSeriesSplit CV (5 folds, purge gap=21) on
@@ -281,12 +351,13 @@ Additive + read-only (DB and `predictions/` untouched). Same leak-safe protocol 
 WAS WRONG; the data shows TWO failure modes with one identical outcome. Do NOT restate the
 old assumption — use this:**
 - **Underfit / high-bias, ~ZERO variance:** Lasso & ElasticNet regularize EVERY coefficient to
-  exactly 0 → they literally ARE the mean-predictor (train RMSE 1.954 ≈ val 1.966, train ρ =
+  exactly 0 → they literally ARE the mean-predictor (train RMSE 1.947 ≈ val 1.960, train ρ =
   val ρ = 0).
-- **Overfit / HIGH variance, zero payoff:** SVR train ρ **+0.923** vs val +0.001; XGBoost
-  +0.842/−0.015; RandomForest +0.679/−0.015 (train RMSE 0.86–1.70 vs val 1.99–2.17). They
+- **Overfit / HIGH variance, zero payoff:** SVR train ρ **+0.923** vs val −0.001; XGBoost
+  +0.842/−0.011; RandomForest +0.631/−0.014 (train RMSE 0.85–1.74 vs val 1.98–2.16). They
   memorize the training rows and generalize at zero — the capacity is spent fitting NOISE.
-  Ridge in between (train ρ +0.299, val −0.031). Calling these "low-variance" is FALSE.
+  Ridge in between (train ρ +0.296, val −0.032). Calling these "low-variance" is FALSE.
+  (Numbers regenerated on the rf=2% excess-Sharpe target; the pattern is unchanged.)
 - **Learning curves are FLAT in training size** (RF val RMSE 1.807→1.837, XGB 2.007→1.957 as
   rows 119→799; target std ≈1.98). If variance were the binding constraint validation error
   would FALL with more data — it does not.
@@ -300,27 +371,30 @@ old assumption — use this:**
   statement of the null: no linear combination beats the intercept.
 - Ridge: 48/48 non-zero but tiny; RF/XGB importances spread thinly (no dominant split var);
   SVR explained via permutation importance on VALIDATION folds (never test).
-- Rank-consensus top-5: growth_score_change, operating_margin_change, equity_ratio_change,
-  profitability_score, return_on_assets_change — mostly CHANGE features. **Magnitudes are
-  trivial; this ranks near-noise.** Interpretability CONFIRMS the null, it does not rescue it.
+- Rank-consensus top-5 (rf=2% run): growth_score_change, operating_margin_change,
+  profitability_score, net_income_growth_yoy_change, capex_intensity — mostly CHANGE features.
+  **Magnitudes are trivial; this ranks near-noise**, and the membership churns between runs,
+  which is itself a symptom of noise-ranking. Interpretability CONFIRMS the null, it does not
+  rescue it.
 
 **3. Classification lens — near-chance, confirms the regression null.**
 - Label = top-third vs bottom-third realized future_63d_sharpe (middle dropped), matching the
   long/short framing. **LEAK CONTROL: tercile cutoffs fit on TRAIN ROWS ONLY** — per CV fold
   from that fold's train rows; from train+val for the one-shot test. Test outcomes never
   inform any cutoff; no cutoff fit on the pooled data.
-- Test AUC 0.434–0.546 (chance 0.500); CV AUC 0.479–0.529, mostly BELOW 0.5 → sign
-  disagreement = noise. SVM is BELOW chance on test (0.434).
-- **Majority baseline acc = 0.579** (train-fitted cutoff + higher test-regime Sharpes leave the
-  test set 57.9% one class), so raw accuracy (0.505–0.554) is at/below that baseline. Read AUC
+- Test AUC 0.449–0.542 (chance 0.500); CV AUC 0.474–0.523, mostly BELOW 0.5 → sign
+  disagreement = noise. SVM is BELOW chance on test (0.449).
+- **Majority baseline acc = 0.572** (train-fitted cutoff + higher test-regime Sharpes leave the
+  test set 57.2% one class), so raw accuracy (0.493–0.532) is at/below that baseline. Read AUC
   and balanced accuracy (~0.5). Balanced within-period variant (50/50) reproduces: AUC
-  0.434–0.549.
+  0.437–0.539. (rf=2% run; same verdict as rf=0.)
 - Verdict: a classification framing gives the SAME answer — cannot separate future winners from
   losers better than chance.
 
 **HONEST CAVEAT (keep stating it):** the test set was already used once by the regression; this
 classification evaluation touches it a SECOND time, under a PRE-COMMITTED protocol (labels,
-models, grids, metrics all fixed before looking). No iterative tuning against test.
+models, grids, metrics all fixed before looking). The rf=0→2% retrain is a THIRD touch, same
+protocol, externally mandated. No iterative tuning against test.
 
 ### Modelling-stage handling still pending (unchanged from before)
 - Negative book equity (MCD/PM/BKNG/ABBV): exclude ROE/equity_ratio or floor denom.
@@ -544,8 +618,9 @@ modelling design, the spec wins.
   at the **report RELEASE date**, never the fiscal-period-end date. Targets are
   computed from t+1 (first trading day AFTER release) over the next 63 trading days on
   adjusted-close prices.
-- **Target:** `future_63d_sharpe = mean(daily ret t+1..t+63) / std(daily ret) * sqrt(252)`.
-  Simple version assumes risk-free = 0 (state it). Also store 63d return and 63d vol.
+- **Target:** `future_63d_sharpe = mean(daily ret t+1..t+63 − rf_daily) / std(daily ret) *
+  sqrt(252)`, `rf_daily = RISK_FREE_RATE_ANNUAL/252`. See the RISK-FREE RATE block above —
+  rf = 2% constant (superseded the earlier rf=0). Also store 63d return and 63d vol.
 - **Six-sub-score architecture:** every sector is scored on the SAME six sub-scores —
   profitability, growth, cash_flow, leverage, efficiency, investment — but the KPIs
   feeding each are sector-specific (full per-sector KPI sets in PROJECT_SPEC.md §2.5).
@@ -775,8 +850,18 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
   a light-ink `dashboard/assets/logo_dark.png`; it is used verbatim and bypasses the filter.
 
 - **Every headline number is DERIVED from an artifact** — universe size, ablation max, the
-  per-rebalance LS sequence, target std, VIF counts. Nothing about "97" is hard-coded, so a
-  pipeline rerun cannot leave the narrative stale. Do NOT reintroduce literals.
+  per-rebalance LS sequence, target std, VIF counts, and the **risk-free rate**
+  (`data.risk_free_annual()` reads `target_63d.risk_free_annual` back from the DB). Nothing
+  about "97" or "2%" is hard-coded, so a pipeline rerun cannot leave the narrative stale. Do
+  NOT reintroduce literals. (The Backtest header used to hard-code "risk-free = 0"; the rf
+  change made that string FALSE. That is exactly the failure this rule exists to prevent.)
+- **NARRATIVE PROSE MUST BE SIGN-SAFE, not just numerically derived.** Two Backtest captions
+  asserted "— no edge" / "the strategy adds no spread" against a then-negative cumulative LS.
+  The rf retrain flipped the cumulative to **+11.4%** and both sentences became lies while
+  every *number* around them stayed correct. They now derive the sign-flip count and a t-stat
+  (`t = mean/(sd/√n)` on the per-rebalance spread) and say "not distinguishable from zero,
+  whatever sign the cumulative figure takes". **Never let a conclusion depend on the sign of a
+  number a rerun can move.** The evidence for the null is the flip + the t-stat, NOT the sign.
 - **Confidence tiers** replace the old raw OOD flag. `out_of_training_dist` and
   `prediction_only` are IDENTICAL by construction (25 names) — surface them as ONE tier, not
   two. `no_release_date` (5) is a strict subset and a stronger caveat. Partition: 72 + 20 + 5.

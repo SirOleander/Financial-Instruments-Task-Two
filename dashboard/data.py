@@ -348,6 +348,18 @@ def load_backtest_holdings() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def risk_free_annual() -> float:
+    """The rf actually used to build the target, read back from target_63d (DERIVED, never a
+    literal — a pipeline rerun at a different rf cannot leave the narrative stale)."""
+    with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as con:
+        row = con.execute(
+            "SELECT DISTINCT risk_free_annual FROM target_63d "
+            "WHERE risk_free_annual IS NOT NULL"
+        ).fetchone()
+    return float(row[0]) if row else 0.0
+
+
+@st.cache_data(show_spinner=False)
 def company_history(ticker: str) -> pd.DataFrame:
     """Per-report timeseries for one company from modelling_data (scores, KPIs, target)."""
     with sqlite3.connect(DB_PATH) as con:

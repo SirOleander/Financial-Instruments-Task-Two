@@ -30,6 +30,32 @@ ANNUAL_REPORTS_TO_FETCH = 5
 QUARTERLY_REPORTS_TO_FETCH = 15
 TARGET_CURRENCY = "USD"
 
+# --- Risk-free rate (the SINGLE definition; imported by price_target.py and K_backtest.py) ---
+# CONSTANT 2.0% annualized. Source/rationale: approximately the average 3-month US Treasury
+# bill yield (FRED series TB3MS, https://fred.stlouisfed.org/series/TB3MS) over the 2020-2026
+# sample period, rounded to a clean 2%. The 3-month T-bill is the standard academic risk-free
+# proxy. A constant (not a time-varying series) is a stated simplification.
+#
+# FREQUENCY CONVERSION — the rate is quoted ANNUALIZED and must be converted to the horizon of
+# each Sharpe calculation. Both consumers annualize ARITHMETICALLY (mean * periods_per_year over
+# std * sqrt(periods_per_year)), so the per-period rf is the SIMPLE division rf/periods_per_year,
+# NOT the geometric (1+rf)**(1/periods_per_year) - 1. Consistency with the annualization
+# convention is what makes `(ann_return - rf) / ann_vol` come out exactly right:
+#   Sharpe = mean_d/std_d*sqrt(252) = (252*mean_d)/(std_d*sqrt(252)) = ann_return/ann_vol
+# so subtracting rf/252 from each daily return yields ann_return - rf in the numerator.
+# NEVER subtract the annual 2% from a daily or 63-day return directly.
+RISK_FREE_RATE_ANNUAL = 0.02
+TRADING_DAYS_PER_YEAR = 252
+
+
+def risk_free_per_period(periods_per_year: float) -> float:
+    """Frequency-convert RISK_FREE_RATE_ANNUAL to a per-period rate (simple/arithmetic).
+
+    periods_per_year=252 -> daily rf (the target's convention).
+    periods_per_year=252/63 -> per-63-day-rebalance rf (the backtest's convention).
+    """
+    return RISK_FREE_RATE_ANNUAL / periods_per_year
+
 COMPANIES = {
     'AAPL': '0000320193',
     'ABBV': '0001551152',

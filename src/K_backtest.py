@@ -16,9 +16,33 @@ included in the universe but FLAGGED out-of-training.
 
 ASSUMPTIONS (stated): equal-weight top-10 long / bottom-10 short; rebalance each fiscal
 quarter (~63 trading days); hold to the next report period; transaction cost applied to
-one-way traded notional at each rebalance (reported at 0 / 5 / 10 bps); risk-free = 0;
+one-way traded notional at each rebalance (reported at 0 / 5 / 10 bps);
 periods with <20 names skipped (cannot form both legs). 4 quarterly rebalances span the test
 year — Sharpe on 4 points is noisy (caveat).
+
+RISK-FREE RATE (A_config.RISK_FREE_RATE_ANNUAL = 0.02; single definition, FRED TB3MS source).
+FREQUENCY CONVERSION: the strategy return series is one observation per ~63-trading-day
+rebalance, i.e. PERIODS_PER_YEAR = 252/63 = 4, so the per-period rf is
+
+    RF_PERIOD = RISK_FREE_RATE_ANNUAL / PERIODS_PER_YEAR = 0.02 / 4 = 0.005   (0.5%)
+
+NOT the raw annual 2%. (The target uses a DIFFERENT conversion, rf/252 per DAY — same annual
+rate, different horizon. See price_target.py.)
+
+PRIMARY Sharpe = SELF-FINANCING treatment. The book is dollar-neutral: the short proceeds fund
+the long leg and earn rf. So the rf CREDIT on the short proceeds exactly cancels the rf you
+would subtract to form an excess return:
+
+    net_p    = (long_p - short_p) + RF_PERIOD - cost_p     <- short proceeds earn rf
+    excess_p = net_p - RF_PERIOD = long_p - short_p - cost_p
+
+=> ann_sharpe_LS is UNCHANGED by the risk-free rate. The cancellation is a RESULT of the
+self-financing structure, not an omission of rf. `ann_sharpe_LS_funded` is reported alongside
+as a SENSITIVITY: the naive fully-funded variant that charges rf on capital the strategy never
+borrowed (excess_p = gross_ls_p - cost_p - RF_PERIOD). It is strictly the more pessimistic
+reading and is provided for transparency, not as the headline.
+
+Equity curves compound the SELF-FINANCING net (long - short - cost), unchanged by rf.
 
 USAGE (run from inside src/):
     python K_backtest.py
@@ -38,6 +62,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import SVR
 from xgboost import XGBRegressor
 
+import A_config
 import J_models as J
 
 OUT = J.OUT
@@ -46,6 +71,9 @@ MIN_NAMES = 2 * LEG    # need >=20 names to form both legs
 COST_BPS_GRID = [0.0, 5.0, 10.0]   # one-way, in bps of traded notional
 PRIMARY_COST_BPS = 10.0
 PERIODS_PER_YEAR = 252 / 63        # ~4 (63-trading-day holding)
+
+RISK_FREE_ANNUAL = A_config.RISK_FREE_RATE_ANNUAL
+RF_PERIOD = A_config.risk_free_per_period(PERIODS_PER_YEAR)   # 0.02 / 4 = 0.005 per rebalance
 
 
 def ensemble_members():
@@ -131,16 +159,24 @@ def main():
     equity_curves = {}
     for c in COST_BPS_GRID:
         cost = (c / 1e4) * bt["traded_notional_oneway"].values
+        # SELF-FINANCING net: short proceeds earn RF_PERIOD, which cancels the RF_PERIOD
+        # subtracted to form the excess return => the spread IS already an excess return.
         net = bt["gross_ls"].values - cost
         equity = np.cumprod(1.0 + net)
         equity_curves[c] = equity
-        ann_sharpe = (net.mean() / net.std(ddof=1) * np.sqrt(PERIODS_PER_YEAR)
-                      if net.std(ddof=1) > 0 else np.nan)
+        sd = net.std(ddof=1)
+        ann_sharpe = net.mean() / sd * np.sqrt(PERIODS_PER_YEAR) if sd > 0 else np.nan
+        # SENSITIVITY: naive fully-funded book, charged rf on capital it never borrowed.
+        # std is unchanged (RF_PERIOD is a constant), only the numerator moves.
+        funded = net - RF_PERIOD
+        ann_sharpe_funded = (funded.mean() / funded.std(ddof=1) * np.sqrt(PERIODS_PER_YEAR)
+                             if funded.std(ddof=1) > 0 else np.nan)
         summary.append({
             "cost_bps_oneway": c,
             "cum_return_LS": float(equity[-1] - 1.0),
             "mean_period_LS": float(net.mean()),
             "ann_sharpe_LS": float(ann_sharpe),
+            "ann_sharpe_LS_funded": float(ann_sharpe_funded),
             "max_drawdown_LS": _max_drawdown(equity),
             "n_rebalances": len(bt),
         })
@@ -178,6 +214,10 @@ def main():
               "intl_in_long", "intl_in_short"]].round(4).to_string(index=False))
     print("\nStrategy summary by transaction cost:")
     print(sm.round(4).to_string(index=False))
+    print(f"\nrisk-free = {RISK_FREE_ANNUAL:.2%} annualized -> RF_PERIOD = "
+          f"{RISK_FREE_ANNUAL}/{PERIODS_PER_YEAR:.0f} = {RF_PERIOD:.4f} per ~63d rebalance.")
+    print("  ann_sharpe_LS        = SELF-FINANCING (rf cancels: short proceeds earn it)")
+    print("  ann_sharpe_LS_funded = SENSITIVITY, naive fully-funded book (rf charged)")
     print(f"\nContext (gross, compounded over the {len(bt)} rebalances): "
           f"long-leg={long_cum:+.4f}  short-leg={short_cum:+.4f}  "
           f"equal-weight universe benchmark={bench:+.4f}")
@@ -206,24 +246,55 @@ def write_summary(bt, sm, long_cum, short_cum, bench, periods):
              "future_63d_sharpe.\n"
              "- Rebalance each fiscal quarter (~63 trading days); hold to next report period.\n"
              "- Transaction cost on one-way traded notional, reported at 0 / 5 / 10 bps "
-             f"(primary = {int(PRIMARY_COST_BPS)} bps). Risk-free = 0.\n"
+             f"(primary = {int(PRIMARY_COST_BPS)} bps).\n"
              f"- Periods with <{MIN_NAMES} names skipped (cannot form both legs); "
              "internationals included but flagged out-of-training.\n")
+    L.append("## Risk-free rate\n")
+    L.append(f"Constant **rf = {RISK_FREE_ANNUAL:.1%} annualized** (~average 3-month US T-bill "
+             "yield, FRED series TB3MS, over the 2020-2026 sample; the 3-month bill is the "
+             "standard academic risk-free proxy). The strategy return series is one "
+             f"observation per ~63-trading-day rebalance, so the frequency-converted rate is "
+             f"**RF_PERIOD = {RISK_FREE_ANNUAL} / {PERIODS_PER_YEAR:.0f} = {RF_PERIOD:.4f}** "
+             "per period — the annual 2% is never subtracted from a 63-day return.\n\n"
+             "The book is **dollar-neutral and self-financing**: the short proceeds fund the "
+             "long leg and earn rf. That rf credit exactly cancels the rf subtracted to form "
+             "an excess return —\n\n"
+             "```\n"
+             "net_p    = (long_p - short_p) + RF_PERIOD - cost_p\n"
+             "excess_p = net_p - RF_PERIOD = long_p - short_p - cost_p\n"
+             "```\n\n"
+             "— so **`ann_sharpe_LS` is unchanged by the risk-free rate**. This cancellation is "
+             "a consequence of the self-financing structure, not an omission of rf. "
+             "`ann_sharpe_LS_funded` is reported as a **sensitivity**: the naive fully-funded "
+             "variant that charges rf on capital the strategy never borrowed "
+             f"(`excess_p = gross_ls_p - cost_p - {RF_PERIOD:.4f}`). It is the more pessimistic "
+             "reading, shown for transparency, not as the headline.\n\n"
+             "Note the target uses the SAME annual rate at a DIFFERENT horizon: "
+             "`rf_daily = 0.02/252`, subtracted from each daily return before mean/std.\n")
     L.append("## Per-rebalance long-short (gross)\n")
     L.append(tbl(bt, ["period", "n_universe", "n_intl", "long_ret", "short_ret", "gross_ls",
                       "intl_in_long", "intl_in_short"]))
     L.append("\n## Strategy summary by transaction cost\n")
     L.append(tbl(sm, ["cost_bps_oneway", "cum_return_LS", "mean_period_LS", "ann_sharpe_LS",
-                      "max_drawdown_LS"]))
+                      "ann_sharpe_LS_funded", "max_drawdown_LS"]))
     L.append(f"\n**Headline (@{int(PRIMARY_COST_BPS)}bps):** cumulative long-short "
-             f"{prim['cum_return_LS']:+.2%}, annualized Sharpe {prim['ann_sharpe_LS']:+.2f}, "
+             f"{prim['cum_return_LS']:+.2%}, annualized Sharpe {prim['ann_sharpe_LS']:+.2f} "
+             f"(self-financing; fully-funded sensitivity {prim['ann_sharpe_LS_funded']:+.2f}), "
              f"max drawdown {prim['max_drawdown_LS']:+.2%} over {int(prim['n_rebalances'])} "
              "quarterly rebalances.\n")
     L.append(f"Context (gross): long leg {long_cum:+.2%}, short leg {short_cum:+.2%}, "
              f"equal-weight universe {bench:+.2%}.\n")
     L.append("## Honest read\n")
-    L.append("With only 4 rebalances the Sharpe/drawdown are high-variance and should not be "
-             "over-interpreted. Given the model showed no reliable rank signal (CV & test "
+    g = bt["gross_ls"].values
+    tstat = g.mean() / (g.std(ddof=1) / np.sqrt(len(g))) if g.std(ddof=1) > 0 else 0.0
+    n_pos = int((g > 0).sum())
+    L.append(f"The per-rebalance spread FLIPS SIGN ({n_pos} of {len(g)} positive) and its mean "
+             f"{g.mean():+.2%} sits well inside one standard deviation {g.std(ddof=1):.2%} "
+             f"(t = {tstat:+.2f} on {len(g) - 1} d.f.) — **not distinguishable from zero**, "
+             "whatever sign the cumulative figure takes. Do not read the cumulative number as "
+             "an edge.\n")
+    L.append(f"With only {len(g)} rebalances the Sharpe/drawdown are high-variance and should "
+             "not be over-interpreted. Given the model showed no reliable rank signal (CV & test "
              "Spearman ~0, robust across the feature-set ablation), any long-short spread here "
              "is consistent with noise, not a repeatable edge. The deliverable is the "
              "END-TO-END LEAK-FREE PIPELINE (features knowable at release date, time-based "

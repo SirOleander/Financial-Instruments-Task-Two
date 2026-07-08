@@ -1,9 +1,9 @@
 scheme,model,cv_auc,test_auc,test_accuracy,test_balanced_accuracy,test_precision,test_recall,test_f1,majority_baseline_acc,n_test,best_params,cm_tn,cm_fp,cm_fn,cm_tp
-train_fitted_tercile,LogisticRegression,0.4787,0.5396,0.5198,0.5388,0.6282,0.4188,0.5026,0.5792,202,{'model__C': 1},56,29,68,49
-train_fitted_tercile,RandomForest,0.4794,0.5456,0.5396,0.5398,0.6176,0.5385,0.5753,0.5792,202,"{'model__max_depth': None, 'model__min_samples_leaf': 20}",46,39,54,63
-train_fitted_tercile,XGBoost,0.482,0.5429,0.5545,0.5446,0.6174,0.6068,0.6121,0.5792,202,"{'model__max_depth': 3, 'model__learning_rate': 0.05, 'model__reg_lambda': 5}",41,44,46,71
-train_fitted_tercile,SVM,0.5294,0.4342,0.505,0.4713,0.5594,0.6838,0.6154,0.5792,202,{'model__C': 0.1},22,63,37,80
-within_period_tercile,LogisticRegression,0.4662,0.5495,0.5372,0.5372,0.5432,0.4681,0.5029,0.5,188,{'model__C': 0.01},57,37,50,44
-within_period_tercile,RandomForest,0.4997,0.5162,0.5426,0.5426,0.55,0.4681,0.5057,0.5,188,"{'model__max_depth': 3, 'model__min_samples_leaf': 20}",58,36,50,44
-within_period_tercile,XGBoost,0.499,0.5069,0.516,0.516,0.5165,0.5,0.5081,0.5,188,"{'model__max_depth': 2, 'model__learning_rate': 0.02, 'model__reg_lambda': 5}",50,44,47,47
-within_period_tercile,SVM,0.4967,0.4339,0.4521,0.4521,0.4667,0.6702,0.5502,0.5,188,{'model__C': 0.1},22,72,31,63
+train_fitted_tercile,LogisticRegression,0.4841,0.5259,0.5124,0.527,0.6049,0.4261,0.5,0.5721,201,{'model__C': 10},54,32,66,49
+train_fitted_tercile,RandomForest,0.4801,0.5419,0.5323,0.5341,0.6061,0.5217,0.5607,0.5721,201,"{'model__max_depth': 5, 'model__min_samples_leaf': 20}",47,39,55,60
+train_fitted_tercile,XGBoost,0.4864,0.5369,0.5124,0.505,0.5766,0.5565,0.5664,0.5721,201,"{'model__max_depth': 2, 'model__learning_rate': 0.05, 'model__reg_lambda': 1}",39,47,51,64
+train_fitted_tercile,SVM,0.5234,0.449,0.4925,0.4642,0.5468,0.6609,0.5984,0.5721,201,{'model__C': 0.1},23,63,39,76
+within_period_tercile,LogisticRegression,0.4742,0.5389,0.5213,0.5213,0.525,0.4468,0.4828,0.5,188,{'model__C': 0.01},56,38,52,42
+within_period_tercile,RandomForest,0.5039,0.5101,0.5053,0.5053,0.5062,0.4362,0.4686,0.5,188,"{'model__max_depth': None, 'model__min_samples_leaf': 20}",54,40,53,41
+within_period_tercile,XGBoost,0.5023,0.5051,0.4894,0.4894,0.4884,0.4468,0.4667,0.5,188,"{'model__max_depth': 3, 'model__learning_rate': 0.02, 'model__reg_lambda': 5}",50,44,52,42
+within_period_tercile,SVM,0.5074,0.4368,0.4521,0.4521,0.4672,0.6809,0.5541,0.5,188,{'model__C': 0.1},21,73,30,64

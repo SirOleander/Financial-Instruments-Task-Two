@@ -1,4 +1,4 @@
-cost_bps_oneway,cum_return_LS,mean_period_LS,ann_sharpe_LS,max_drawdown_LS,n_rebalances
-0.0,-0.024,0.0041,0.0501,-0.2337,4
-5.0,-0.0298,0.0026,0.0322,-0.2362,4
-10.0,-0.0356,0.0012,0.0142,-0.2388,4
+cost_bps_oneway,cum_return_LS,mean_period_LS,ann_sharpe_LS,ann_sharpe_LS_funded,max_drawdown_LS,n_rebalances
+0.0,0.1264,0.0375,0.5305,0.4598,-0.1577,4
+5.0,0.12,0.0361,0.5096,0.439,-0.1605,4
+10.0,0.1136,0.0346,0.4887,0.4181,-0.1633,4

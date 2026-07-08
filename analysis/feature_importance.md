@@ -6,18 +6,18 @@ Slide-24 requirement: the models are **not black boxes**. Below is exactly what 
 
 | rank | feature | mean_rank |
 |---|---|---|
-| 1 | `growth_score_change` | 11.2 |
-| 2 | `operating_margin_change` | 14.5 |
-| 3 | `equity_ratio_change` | 17.3 |
-| 4 | `profitability_score` | 18.0 |
-| 5 | `return_on_assets_change` | 18.2 |
-| 6 | `capex_intensity` | 18.5 |
-| 7 | `operating_cash_flow_margin` | 18.5 |
-| 8 | `net_income_growth_yoy_change` | 18.7 |
-| 9 | `operating_cash_flow_growth_yoy_change` | 19.8 |
-| 10 | `leverage_score_change` | 20.0 |
-| 11 | `revenue_growth_yoy` | 20.2 |
-| 12 | `equity_ratio` | 20.2 |
+| 1 | `growth_score_change` | 11.3 |
+| 2 | `operating_margin_change` | 14.2 |
+| 3 | `profitability_score` | 17.0 |
+| 4 | `net_income_growth_yoy_change` | 18.0 |
+| 5 | `capex_intensity` | 18.5 |
+| 6 | `return_on_assets_change` | 18.8 |
+| 7 | `gross_margin` | 19.3 |
+| 8 | `operating_cash_flow_margin` | 19.8 |
+| 9 | `equity_ratio` | 20.0 |
+| 10 | `equity_ratio_change` | 20.2 |
+| 11 | `growth_score` | 20.2 |
+| 12 | `operating_cash_flow_growth_yoy_change` | 20.3 |
 
 ## Per-model views
 
@@ -27,6 +27,6 @@ Slide-24 requirement: the models are **not black boxes**. Below is exactly what 
 
 ## Interpretation
 
-- The models concentrate what little weight they have on **growth_score_change, operating_margin_change, equity_ratio_change, profitability_score** — broadly the *change* features (margin and profitability deltas) rather than levels, consistent with the EDA where `net_margin_change` was the strongest single feature (|Spearman| ~0.075).
+- The models concentrate what little weight they have on **growth_score_change, operating_margin_change, profitability_score, net_income_growth_yoy_change** — broadly the *change* features (margin and profitability deltas) rather than levels, consistent with the EDA where `net_margin_change` was the strongest single feature (|Spearman| ~0.075).
 - **But the magnitudes are trivial.** No feature is a strong driver: the ranking below is a ranking of near-noise. Ridge's standardized coefficients are small and the tree importances are spread thinly across all 48 features (no dominant split variable). Reading these as economic 'drivers' would be over-interpretation.
 - The honest statement: *we can show exactly what the models use, and what they use carries almost no predictive power.* Interpretability here confirms rather than rescues the null.
