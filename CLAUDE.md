@@ -635,6 +635,27 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
 - **Watchlist is flush-left**: `.block-container` drops its centering `max-width` and its left
   gutter (`padding-left: .85rem`), putting the first ticker tile ~14px from the window edge.
   Restoring `max-width:1680px` re-centers everything and undoes this.
+- **The Ranking table is a hand-rolled HTML grid, NOT `st.dataframe`** — and it has to be.
+  `st.dataframe` draws its row-selection checkbox column *inside the canvas grid* (unreachable
+  from CSS) and that column only exists because `on_select` is enabled, so "no checkbox" and
+  "clickable rows" are mutually exclusive there. Each row is a grid div with a **transparent
+  full-row `st.button` overlaid** (`rkbtn_*`), which keeps the click in-session. A
+  query-param `<a href>` was tested and REJECTED: it full-reloads the page and resets
+  session_state (theme + view). Two CSS facts are load-bearing, both discovered by measuring
+  the DOM, not by looking at a screenshot:
+    1. the row container needs `flex:0 0 44px !important` — Streamlit makes it a column-flex
+       item with `flex:1 1 0%`, and a `flex-basis:0%` **beats `height`**, collapsing rows to
+       27px so the overlay covers only part of the row;
+    2. `.sd-rt-row` needs a fixed px height (not `100%`) — an unnamed emotion wrapper between
+       `stMarkdown` and `stMarkdownContainer` collapses to content height, so a percentage
+       never resolves.
+  Trade-off accepted: **column-header sorting is gone** (st.dataframe gave it for free). The
+  table is rank-ordered, which is the point. `predictions_all89.csv` order is authoritative.
+- **NO per-row confidence/provenance column on Ranking.** A per-row "prediction-only" flag
+  contradicted the ranking by marking the very rows it recommends. The disclosure lives once,
+  at tab level, in `ui.scope_note()` with DERIVED counts (72 trained / 97 ranked / 25
+  out-of-sample). Do not reintroduce a per-row flag. The per-company `confidence` tier is
+  still shown on **Company Detail**, where it describes one name rather than the whole book.
 
 - **Every headline number is DERIVED from an artifact** — universe size, ablation max, the
   per-rebalance LS sequence, target std, VIF counts. Nothing about "97" is hard-coded, so a

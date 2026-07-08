@@ -135,7 +135,6 @@ def watchlist(companies) -> None:
 
 
 def view_ranking(logos: dict) -> None:
-    import pandas as pd
     mode = st.session_state["mode"]
     fc = data.flag_counts()
     st.markdown(f'<div class="sd-view-title">Company Ranking</div>'
@@ -148,65 +147,47 @@ def view_ranking(logos: dict) -> None:
                     "correlation) and the long/short backtest is flat — see the <b>Model</b> "
                     "tab. Rankings are low-confidence, not investment advice.")
 
-    df = data.load_ranking()
-    ui.flag_legend(mode, fc)
+    # ONE tab-level scope statement replaces the old per-row Confidence column: a per-row
+    # "prediction-only" flag contradicted the ranking by flagging the very rows it recommends.
+    # Counts are DERIVED, so the sentence cannot drift from the artifacts.
+    ui.scope_note(
+        mode,
+        f"The model is trained on the <b>{fc['train_eligible']} companies</b> that have a "
+        f"valid forward-63-day target and sufficient history. <b>All {fc['n']} companies</b> "
+        f"are fully processed (fundamentals, KPIs, scores, features) and ranked; the other "
+        f"<b>{fc['prediction_only']}</b> — thin-history internationals and names without "
+        f"machine-readable release dates — are ranked as <b>out-of-sample predictions</b> from "
+        f"that model. This is a methodology demonstration, not a portfolio.")
 
+    df = data.load_ranking()
     longs = df[df["basket"] == "LONG"]["ticker"].tolist()
     shorts = df[df["basket"] == "SHORT"]["ticker"].tolist()
     ui.basket_summary(mode, longs, shorts)
 
-    n_flag_long = int(df[df["basket"] == "LONG"]["out_of_training_dist"].sum())
-    n_flag_short = int(df[df["basket"] == "SHORT"]["out_of_training_dist"].sum())
-    ui.note(f"<b>{n_flag_long}</b> of the 10 longs and <b>{n_flag_short}</b> of the 10 shorts "
-            f"are prediction-only names the model never trained on — a further reason to read "
-            f"the book as a methodology demo, not a portfolio.")
+    # Full-page table: every row rendered down the page, no fixed-height widget and no inner
+    # scrollbar. st.dataframe cannot do this without its canvas row-selector checkbox column
+    # (drawn inside the grid canvas, unreachable from CSS), so the table is an HTML grid with
+    # a transparent full-row st.button overlaid per row. That keeps the click IN-SESSION — a
+    # query-param link would full-reload the page and drop the theme/view state.
+    ui.ranking_table_head()
+    with st.container(key="ranktable"):     # gap:0 wrapper — rows must butt up against each other
+        for _, r in df.iterrows():
+            key = ui.safe_key(r["ticker"])
+            with st.container(key=f"rkrow_{key}"):
+                st.markdown(
+                    ui.ranking_row_html(
+                        mode, rank=int(r["rank_ensemble"]), logo=logos.get(r["ticker"]),
+                        ticker=r["ticker"], name=r["name"], sector=r["sector"],
+                        pred=float(r["pred_ensemble"]), basket=r["basket"],
+                        selected=st.session_state.get("selected") == r["ticker"]),
+                    unsafe_allow_html=True)
+                if st.button(r["ticker"], key=f"rkbtn_{key}", use_container_width=True,
+                             help=f"Open {r['name']} detail"):
+                    st.session_state["selected"] = r["ticker"]
+                    st.session_state["view"] = DETAIL_VIEW
+                    st.rerun()
 
-    # scannable, sortable table — logos via ImageColumn, green/red row tint per basket
-    disp = pd.DataFrame({
-        "Rank": df["rank_ensemble"],
-        "Logo": [logos.get(t, "") for t in df["ticker"]],
-        "Ticker": df["ticker"],
-        "Company": df["name"],
-        "Sector": df["sector"],
-        "Pred. Sharpe": df["pred_ensemble"],
-        "Basket": df["basket"],
-        "Confidence": df["confidence"],
-    })
-
-    def _tint(row):
-        c = ("rgba(38,166,154,.15)" if row["Basket"] == "LONG"
-             else "rgba(239,83,80,.15)" if row["Basket"] == "SHORT" else "")
-        return [f"background-color:{c}"] * len(row)
-
-    styler = disp.style.apply(_tint, axis=1).format({"Pred. Sharpe": "{:+.2f}"})
-
-    ev = st.dataframe(
-        styler, hide_index=True, width="stretch", height=560,
-        on_select="rerun", selection_mode="single-row",
-        column_config={
-            "Rank": st.column_config.NumberColumn(width="small"),
-            "Logo": st.column_config.ImageColumn("", width="small"),
-            "Ticker": st.column_config.TextColumn(width="small"),
-            "Company": st.column_config.TextColumn(width="large"),
-            "Sector": st.column_config.TextColumn(width="medium"),
-            "Pred. Sharpe": st.column_config.NumberColumn(
-                "Pred. Sharpe", width="small",
-                help="Ensemble-predicted forward 63-day Sharpe (SVR+RF+XGB)."),
-            "Basket": st.column_config.TextColumn(width="small"),
-            "Confidence": st.column_config.TextColumn(
-                "Confidence", width="medium",
-                help="Train-eligible = model learned from this name. Prediction-only = held "
-                     "out of training. No release date = no look-ahead-safe target exists."),
-        },
-    )
-    if ev.selection.rows:
-        tk = df.iloc[ev.selection.rows[0]]["ticker"]
-        if tk != st.session_state.get("_rank_last"):
-            st.session_state["_rank_last"] = tk
-            st.session_state["selected"] = tk
-            st.session_state["view"] = DETAIL_VIEW
-            st.rerun()
-    st.caption("Click a row to open its Company Detail. Click a column header to sort.")
+    st.caption("Click any row to open its Company Detail.")
 
 
 def _tab_performance(mode, cv, tm) -> None:

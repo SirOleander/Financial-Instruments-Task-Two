@@ -261,13 +261,87 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
       margin-top:6px; }}
     .sd-tile .s {{ font-size:.72rem; color:{P['faint']}; margin-top:3px; }}
 
-    /* provenance flag chips (data-quality tiers, not performance) */
-    .sd-flags {{ display:flex; gap:8px; flex-wrap:wrap; margin:2px 0 14px; }}
-    .sd-flag {{ display:inline-flex; align-items:center; gap:7px; font-size:.72rem;
-      border:1px solid {P['border']}; background:{P['card']}; border-radius:999px;
-      padding:5px 11px; color:{P['muted']}; }}
-    .sd-flag b {{ color:{P['strong']}; font-family:'IBM Plex Mono',monospace; font-weight:600; }}
-    .sd-flag .dot {{ width:8px; height:8px; border-radius:50%; flex:0 0 auto; }}
+    /* ---------------- ranking table: full-page HTML grid, no inner scrollbar ----------------
+       Each row is a plain grid div with a TRANSPARENT st.button stretched over it, so the whole
+       row is clickable while the click stays in-session (no page reload, no canvas checkbox
+       column). The row container must be position:relative for the overlay to anchor. */
+    .sd-rt-head, .sd-rt-row {{
+      display:grid; grid-template-columns:{RANK_COLS}; align-items:center; gap:10px;
+      padding:0 12px; }}
+    /* NOTE: `position:sticky` does not actually stick here — the scroll container is
+       Streamlit's .stMain flex column, which defeats it (the top bar has the same issue).
+       Kept harmlessly; the header scrolls away with the page, which is normal for a
+       full-page table. Do not "fix" by giving the table its own scroll container: an inner
+       scrollbar is exactly what this table is meant not to have. */
+    .sd-rt-head {{
+      position:sticky; top:64px; z-index:20; background:{P['bg']};
+      border-bottom:1px solid {P['border']}; padding-top:9px; padding-bottom:9px;
+      margin-top:4px; }}
+    .sd-rt-head .h {{ font-size:.63rem; letter-spacing:.14em; text-transform:uppercase;
+      font-weight:700; color:{P['faint']}; }}
+    .sd-rt-head .h:nth-child(6) {{ text-align:right; }}
+
+    /* fixed px, not 100%: an unnamed emotion wrapper sits between stMarkdown and
+       stMarkdownContainer and collapses to content height, so a percentage never resolves */
+    .sd-rt-row {{ height:{RANK_ROW_H}px; border-bottom:1px solid {P['border_soft']};
+      border-radius:6px; transition:background .08s ease; }}
+    .sd-rt-row .c {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+    .sd-rt-row .rank {{ font-family:'IBM Plex Mono',monospace; font-size:.8rem;
+      color:{P['muted']}; }}
+    .sd-rt-row .logo {{ display:flex; align-items:center; }}
+    .sd-rt-row .logo img {{ width:26px; height:26px; border-radius:6px; background:#fff;
+      object-fit:contain; padding:1px; }}
+    .sd-rt-row .logo .fallback {{ width:26px; height:26px; border-radius:6px; color:#fff;
+      display:flex; align-items:center; justify-content:center;
+      font-family:'IBM Plex Mono',monospace; font-size:.58rem; font-weight:700; }}
+    .sd-rt-row .tk {{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:.83rem;
+      color:{P['strong']}; }}
+    .sd-rt-row .nm {{ font-size:.83rem; color:{P['text']}; }}
+    .sd-rt-row .sec {{ font-size:.78rem; color:{P['muted']}; }}
+    /* predicted Sharpe is a MODEL OUTPUT, not realized performance -> neutral, never up/down */
+    .sd-rt-row .ps {{ font-family:'IBM Plex Mono',monospace; font-size:.85rem; font-weight:600;
+      color:{P['strong']}; text-align:right; }}
+    .sd-rt-row .pill {{ font-family:'IBM Plex Mono',monospace; font-size:.63rem; font-weight:700;
+      letter-spacing:.06em; border:1px solid; border-radius:5px; padding:2px 6px; }}
+    .sd-rt-row .mid {{ color:{P['faint']}; }}
+    .sd-rt-row.sel {{ outline:1px solid {P['accent']}; outline-offset:-1px; }}
+
+    /* Anchor the overlay. The row container MUST carry an explicit height: with the button
+       absolutely positioned it leaves the flow, and Streamlit's vertical block otherwise
+       collapses to the button's natural 28px, so `inset:0` would stretch the overlay over
+       28px of a 44px row and the row's own middle would not be clickable. Every wrapper
+       between the container and .sd-rt-row is forced to 100% for the same reason. */
+    /* `flex:0 0 Npx` is load-bearing: Streamlit makes each row container a column-flex item
+       with `flex:1 1 0%`, and a flex-basis of 0% BEATS `height`, collapsing the row to its
+       content (27px) no matter what height we set. */
+    div[class*="st-key-rkrow_"] {{
+      position:relative; flex:0 0 {RANK_ROW_H}px !important;
+      height:{RANK_ROW_H}px; min-height:{RANK_ROW_H}px; margin-bottom:2px; }}
+    /* kill Streamlit's 1rem inter-element gap BETWEEN rows, else 44px rows sit 62px apart */
+    div[class*="st-key-ranktable"] {{ gap:0 !important; }}
+    div[class*="st-key-rkrow_"] > [data-testid="stVerticalBlock"] {{
+      height:100%; gap:0 !important; }}
+    div[class*="st-key-rkrow_"] [data-testid="stElementContainer"]:not([class*="st-key-rkbtn_"]) {{
+      height:100%; margin:0 !important; }}
+    div[class*="st-key-rkrow_"] [data-testid="stMarkdown"],
+    div[class*="st-key-rkrow_"] [data-testid="stMarkdownContainer"] {{
+      height:100%; margin:0 !important; }}
+    div[class*="st-key-rkrow_"]:hover .sd-rt-row {{ background:{P['hover']} !important; }}
+
+    /* the invisible full-row click target (keeps an accessible name for screen readers) */
+    div[class*="st-key-rkbtn_"] {{
+      position:absolute; inset:0; width:100%; height:100% !important; z-index:5;
+      margin:0 !important; }}
+    div[class*="st-key-rkbtn_"] button {{
+      width:100%; height:100% !important; min-height:0 !important; padding:0 !important;
+      background:transparent !important; border:none !important; box-shadow:none !important;
+      color:transparent !important; font-size:0 !important; cursor:pointer; }}
+    div[class*="st-key-rkbtn_"] button:hover, div[class*="st-key-rkbtn_"] button:active,
+    div[class*="st-key-rkbtn_"] button:focus {{
+      background:transparent !important; border:none !important; color:transparent !important;
+      box-shadow:none !important; }}
+    div[class*="st-key-rkbtn_"] button:focus-visible {{
+      outline:2px solid {P['accent']}; outline-offset:-2px; }}
 
     /* matplotlib figures: sit on an intentional light card in either theme */
     [data-testid="stImage"] img {{ background:#fff; border:1px solid {P['border']};
@@ -291,35 +365,60 @@ def hero_badge(ticker: str, sector: str, logo_uri: str | None, mode: str = "dark
             f'{ticker.split(".")[0][:4]}</div>')
 
 
-# confidence tiers -> (color-role, meaning). Order is the tier order, best first.
-CONFIDENCE_TIERS = [
-    ("Train-eligible", "accent",
-     "US/GOOGL/GEV names with enough history to train on; the model learned from these."),
-    ("Prediction-only", "muted",
-     "Held OUT of training (thin, structurally annual history) — scored and ranked, but the "
-     "model never saw them. Lower confidence."),
-    ("No release date", "down",
-     "yfinance exposes no usable report-release date, so no look-ahead-safe target could ever "
-     "be built. Ranked on features alone — lowest confidence."),
-]
+def scope_note(mode: str, text: str) -> None:
+    """The single prominent tab-level scope/caveat statement on the Ranking view.
 
-
-def flag_legend(mode: str, counts: dict) -> None:
-    """Chips explaining the provenance tiers, with derived counts.
-
-    These are DATA-QUALITY tiers, never performance — so they get the chrome/status roles,
-    and each chip carries a text label (identity is never colour-alone)."""
+    This REPLACED a per-row 'Confidence' column. A per-row train/prediction-only flag
+    contradicted the ranking itself — it marked the very rows the ranking was recommending.
+    The honest disclosure belongs once, at tab level, describing the whole book. Rendered in
+    the accent (chrome/attention), never green/red: it is scope, not performance."""
     P = palette(mode)
-    key = {"Train-eligible": counts["train_eligible"],
-           "Prediction-only": counts["prediction_only"] - counts["no_release_date"],
-           "No release date": counts["no_release_date"]}
-    chips = "".join(
-        f'<span class="sd-flag" title="{desc}"><span class="dot" '
-        f'style="background:{P[role]}"></span>{name} <b>{key[name]}</b></span>'
-        for name, role, desc in CONFIDENCE_TIERS)
-    st.markdown(f'<div class="sd-flags">{chips}'
-                f'<span class="sd-flag"><span class="dot" style="background:{P["faint"]}">'
-                f'</span>Universe <b>{counts["n"]}</b></span></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="border:1px solid {P["accent"]}55;border-left:3px solid {P["accent"]};'
+        f'border-radius:10px;padding:13px 16px;margin:2px 0 16px;background:{P["accent_dim"]};'
+        f'color:{P["text"]};font-size:.82rem;line-height:1.6;">'
+        f'<div style="font-size:.64rem;letter-spacing:.18em;text-transform:uppercase;'
+        f'font-weight:700;color:{P["accent_soft"] if mode == "dark" else P["accent"]};'
+        f'margin-bottom:6px;">Scope of the model</div>{text}</div>',
+        unsafe_allow_html=True)
+
+
+# ------------------------------------------------------------- ranking table ------------ #
+# One shared grid template for the header and every row, so columns line up exactly.
+RANK_COLS = "62px 46px 96px minmax(190px,1fr) 210px 118px 96px"
+RANK_HEADS = ["Rank", "", "Ticker", "Company", "Sector", "Pred. Sharpe", "Basket"]
+RANK_ROW_H = 44  # px — must be a fixed height; the click overlay is sized against it
+
+
+def ranking_table_head() -> None:
+    cells = "".join(f'<div class="h">{h}</div>' for h in RANK_HEADS)
+    st.markdown(f'<div class="sd-rt-head">{cells}</div>', unsafe_allow_html=True)
+
+
+def ranking_row_html(mode: str, *, rank: int, logo: str | None, ticker: str, name: str,
+                     sector: str, pred: float, basket: str, selected: bool) -> str:
+    """One full-width grid row. Basket pills use the reserved green/red (real long/short
+    semantics); the predicted Sharpe stays NEUTRAL — it is a model output, not realized
+    performance, and colouring it green/red would imply a result the model does not have."""
+    P = palette(mode)
+    tint = (f"{P['up']}26" if basket == "LONG"
+            else f"{P['down']}26" if basket == "SHORT" else "transparent")
+    badge = (f'<img src="{logo}" alt="">' if logo
+             else f'<span class="fallback" style="background:{sector_color(sector, mode)}">'
+                  f'{ticker.split(".")[0][:2]}</span>')
+    pill = (f'<span class="pill" style="color:{P["up"]};border-color:{P["up"]}66">LONG</span>'
+            if basket == "LONG" else
+            f'<span class="pill" style="color:{P["down"]};border-color:{P["down"]}66">SHORT</span>'
+            if basket == "SHORT" else '<span class="mid">—</span>')
+    sel = " sel" if selected else ""
+    return (f'<div class="sd-rt-row{sel}" style="background:{tint}">'
+            f'<div class="c rank">{rank}</div>'
+            f'<div class="c logo">{badge}</div>'
+            f'<div class="c tk">{ticker}</div>'
+            f'<div class="c nm">{name}</div>'
+            f'<div class="c sec">{sector}</div>'
+            f'<div class="c ps">{pred:+.2f}</div>'
+            f'<div class="c bk">{pill}</div></div>')
 
 
 def coming_soon(stage: str, title: str, body: str) -> None:
