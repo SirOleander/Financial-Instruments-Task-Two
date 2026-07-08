@@ -729,6 +729,16 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
   NOTE: `company_ohlc` was ALREADY `@st.cache_data`-cached and was never the bottleneck
   (0.1 ms warm); and hovering triggers no Streamlit rerun at all (no Vega selection is bound
   back to Python). Profile before assuming the loader is at fault.
+- **Watchlist sort = pure alphabetical by the DISPLAYED ticker, numbers first.** Not
+  sector-grouped (it used to be, via `ORDER BY sector, ticker`). The sort lives in
+  `app.watchlist()` as a `.sort_values("_disp")`, NOT in `data.load_companies()`, because
+  sorting on the display ticker needs `display_tickers()`, which itself calls
+  `load_companies()` — putting it in the loader would be circular. (Every other consumer of
+  `load_companies()` is order-independent: dict lookups, boolean filters, unique CSS
+  selectors — so the loader's `ORDER BY sector, ticker` is retained and harmless.)
+  The six numeric tickers (000660, 005930, 6758, 7203, 8306, 9988) sort BEFORE the letters —
+  a plain string sort puts digits first, and "numbers first, then A→Z" was chosen
+  deliberately. To flip them to the bottom, key on `(disp[0].isdigit(), disp)`.
 - **Display tickers are STRIPPED; the real ticker is always the key.** `data.display_tickers()`
   maps `SHEL.L -> SHEL`, `005930.KS -> 005930` (only the dot-suffix; `BRK-B` and `NOVO-B` keep
   their share class). Used ONLY for rendered text in the Watchlist, the Ranking table and the

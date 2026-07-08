@@ -103,6 +103,22 @@ def top_bar() -> str:
 def watchlist(companies) -> None:
     """Left column: sector filter + the ticker-only company list (names on hover).
 
+    SORT: pure alphabetical by the DISPLAYED (suffix-stripped) ticker — the exact string the
+    user reads — so the list is truly A→Z on screen. NOT sector-grouped. Filtering to one
+    sector preserves that order, so a single sector reads A→Z too.
+
+    Numeric tickers (000660, 005930, 6758, 7203, 8306, 9988) land FIRST, before the letters.
+    That is a CONSCIOUS choice, not an accident of ASCII: a plain string sort puts digits
+    before letters, and "numbers first, then A→Z" is the simplest rule to state and the
+    easiest to scan. To push them to the bottom instead, key on
+    `(display[0].isdigit(), display)`.
+
+    The sort lives HERE, not in `data.load_companies()`, for two reasons: (a) sorting by the
+    display ticker needs `display_tickers()`, which itself calls `load_companies()` — sorting
+    in the loader would be circular; (b) other views consume `load_companies()` and must not
+    be silently reordered. (Audited: every other consumer is order-independent — dict lookups,
+    boolean filters, unique CSS selectors — so this is belt-and-braces.)
+
     Tickers are shown WITHOUT their exchange suffix; the real ticker remains the widget key,
     the session-state value and the routing identity. Search still matches the real ticker, so
     typing 'SHEL.L' or 'SHEL' both find Shell."""
@@ -111,7 +127,9 @@ def watchlist(companies) -> None:
         st.selectbox("sector", sectors, label_visibility="collapsed", key="co_sector")
 
         disp = data.display_tickers()
-        df = companies
+        # sort by the rendered label, once, before filtering (filters preserve row order)
+        df = companies.assign(_disp=companies["ticker"].map(disp)) \
+                      .sort_values("_disp", kind="stable")
         pick = st.session_state.get("co_sector", "All sectors")
         if pick != "All sectors":
             df = df[df["sector"] == pick]
@@ -119,7 +137,7 @@ def watchlist(companies) -> None:
         if q:
             # match on the real ticker, the display ticker and the name
             df = df[df["ticker"].str.lower().str.contains(q)
-                    | df["ticker"].map(lambda t: q in disp[t].lower())
+                    | df["_disp"].str.lower().str.contains(q, regex=False)
                     | df["name"].str.lower().str.contains(q)]
 
         st.markdown(f'<div class="sd-wl-label"><span>Watchlist</span>'
