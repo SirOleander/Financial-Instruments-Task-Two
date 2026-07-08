@@ -21,14 +21,11 @@ Run from the repo root:
 """
 from __future__ import annotations
 
-from pathlib import Path
 
 import streamlit as st
 
 import data
 import ui
-
-ASSETS = Path(__file__).resolve().parent / "assets"
 
 # The four standalone nav items. "Company Detail" is deliberately NOT here: it is a
 # drill-down, reachable only by clicking a company in the left watchlist (or a Ranking row).
@@ -59,46 +56,46 @@ def _apply_native_theme(mode: str) -> None:
 
 
 def top_bar() -> str:
-    """Slim top bar: logo | search | nav | theme toggle. Returns the active view.
+    """Slim top bar: [logo] [ search + 4 nav items, centred ] [theme toggle].
 
-    Nav is four SEPARATE buttons sitting beside the search box, not a fused segmented pill
-    group. Because `view` is no longer a widget key (segmented_control owned it before), any
-    caller can now assign st.session_state["view"] directly — which is why the old
-    `_pending_view` deferral hack is gone."""
+    The search box and the four nav items form ONE centred group with equal ~0.5cm gaps.
+    Nav items are borderless until hover; only the active one is filled with the accent.
+    The logo is a click-home target -> Ranking (a transparent button overlays it, the same
+    in-session trick used by the ranking rows).
+
+    `view` is plain session state, not a widget key, so any caller may assign it directly."""
     with st.container(key="topbar"):
-        c_logo, c_search, c_nav, c_toggle = st.columns(
-            [1.9, 2.7, 4.6, 0.55], vertical_alignment="center")
+        # equal outer columns keep the middle group centred on the page
+        c_logo, c_mid, c_toggle = st.columns([1.5, 7.0, 1.5], vertical_alignment="center")
         with c_logo:
-            logo = ASSETS / "logo.png"
-            if logo.exists():
-                st.image(str(logo), width=150)
-            else:
-                st.markdown(ui.logo_html(), unsafe_allow_html=True)
-        with c_search:
-            st.text_input("search", placeholder="Search ticker or company…",
-                          label_visibility="collapsed", key="co_search")
-        with c_nav:
-            with st.container(key="navbar"):
-                # trailing spacer keeps the pills compact and left-aligned against the search
-                # box, rather than stretching them into four wide blocks (which would read as
-                # a fused segmented group again).
-                cols = st.columns([1, 1, 1, 1, 2.4], gap="small")
-                for col, name in zip(cols[:len(VIEWS)], VIEWS):
+            with st.container(key="logohome"):
+                logo_uri, whiten = data.app_logo_uri(st.session_state["mode"])
+                st.markdown(ui.logo_html(logo_uri, whiten), unsafe_allow_html=True)
+                if st.button("Home", key="logobtn", help="Back to Ranking"):
+                    st.session_state["view"] = "Ranking"
+                    st.rerun()
+        with c_mid:
+            with st.container(key="navgroup"):
+                cols = st.columns([1, 1, 1, 1, 1], gap="small")
+                with cols[0]:
+                    st.text_input("search", placeholder="Search ticker or company…",
+                                  label_visibility="collapsed", key="co_search")
+                for col, name in zip(cols[1:], VIEWS):
                     with col:
                         active = st.session_state["view"] == name
                         if st.button(name, key=f"nav_{name.lower()}",
-                                     use_container_width=True,
                                      type="primary" if active else "secondary"):
                             st.session_state["view"] = name
                             st.rerun()
         with c_toggle:
-            icon = "☀" if st.session_state["mode"] == "dark" else "☾"
-            if st.button(icon, key="themebtn", help="Toggle light / dark"):
-                new_mode = "light" if st.session_state["mode"] == "dark" else "dark"
-                st.session_state["mode"] = new_mode
-                # must precede the rerun — see _apply_native_theme's timing note
-                _apply_native_theme(new_mode)
-                st.rerun()
+            with st.container(key="themebox"):
+                icon = "☀" if st.session_state["mode"] == "dark" else "☾"
+                if st.button(icon, key="themebtn", help="Toggle light / dark"):
+                    new_mode = "light" if st.session_state["mode"] == "dark" else "dark"
+                    st.session_state["mode"] = new_mode
+                    # must precede the rerun — see _apply_native_theme's timing note
+                    _apply_native_theme(new_mode)
+                    st.rerun()
     return st.session_state["view"]
 
 

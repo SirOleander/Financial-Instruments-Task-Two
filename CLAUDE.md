@@ -658,19 +658,38 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
   still shown on **Company Detail**, where it describes one name rather than the whole book.
   A separate one-line note under the baskets reports how much of the ACTUAL BOOK is
   out-of-sample ("6 of the 20 picks") — that is summary-level, not per-row, and is kept.
-- **ONE scroll container in the entire app: `.stMain` (the page).** Nothing else scrolls —
-  not the watchlist, not the ranking table. The watchlist is part of the page flow and scrolls
-  off-screen; the top-bar search is how you jump to a company from anywhere. Do not add
-  `max-height` + `overflow-y` back to `.st-key-colist`. Note `overflow-x:hidden` ALONE also
-  creates a scrollport (a non-`visible` value on one axis forces the other to `auto`), so the
-  watchlist relies on the button's own `text-overflow:ellipsis` to clip long tickers.
-- **Sticky goes on the WRAPPER, not the keyed container.** Streamlit wraps a keyed
-  `st.container` in a `stLayoutWrapper` sized to its content, and a sticky element is confined
-  to its containing block — so `position:sticky` on `.st-key-topbar` stuck for 73px and then
-  scrolled away. The rule targets `[data-testid="stLayoutWrapper"]:has(> .st-key-topbar)`,
-  which IS a direct child of the tall page vertical block. Requires `:has()` (Chrome 105+,
-  Safari 15.4+, Firefox 121+). This is load-bearing now the watchlist scrolls with the page:
-  the search box is the only in-view way to reach a company once scrolled.
+- **Two scroll containers, deliberately: `.stMain` (the page) and `.st-key-colist` (the
+  watchlist).** The RANKING TABLE has none — that is the invariant to protect. The watchlist is
+  a CONTAINED sticky panel (height = viewport below the header) so it stays visible while the
+  main column scrolls. (This reverses an earlier "watchlist scrolls with the page" iteration;
+  don't flip it back without being asked.)
+- **`stLayoutWrapper` is the recurring trap.** Streamlit inserts one between a keyed
+  `st.container` and its children. Consequences, all found by measuring the DOM:
+    1. **Sticky must go on the wrapper.** A sticky element is confined to its containing block,
+       so `position:sticky` on `.st-key-topbar` stuck for 73px (the wrapper's height) and then
+       scrolled away. Rules target `[data-testid="stLayoutWrapper"]:has(> .st-key-topbar)` and
+       `...:has(> .st-key-watchlist)`, which ARE children of the tall page/column blocks.
+       Requires `:has()` (Chrome 105+, Safari 15.4+, Firefox 121+).
+    2. **`>` child combinators silently miss.** `.st-key-navgroup > [data-testid=
+       "stHorizontalBlock"]` never matched — use descendant selectors inside keyed containers.
+    3. **A flex chain breaks at the wrapper.** The wrapper is `flex:0 1 auto; min-height:auto`,
+       so it sizes to content: `.st-key-colist`'s `overflow-y:auto` did nothing until the
+       wrapper itself got `flex:1 1 auto; min-height:0`.
+- **`flex:1 1 0%` beats `height` — guard every clickable row.** Streamlit gives element
+  containers `flex:1 1 0%`; inside a height-constrained flex column that collapses rows and
+  click targets stop covering the visible row (this bit the ranking overlay). `.st-key-colist
+  [data-testid="stElementContainer"]` is pinned to `flex:0 0 auto` for exactly this reason.
+  After ANY layout change here, re-probe click targets with `elementFromPoint`.
+- **Header:** logo | centred (search + 4 nav items, `NAV_GAP`=19px ≈ 0.5cm) | theme toggle.
+  Nav items are borderless until hover; only the active one is accent-filled. No divider under
+  the header. The logo is a click-home target (transparent `logobtn` overlay -> Ranking) and
+  works whether or not a logo file exists.
+- **Logo:** drop `dashboard/assets/logo.png` (any aspect ratio; auto-detected, no restart).
+  `data.app_logo_uri(mode)` trims transparent padding on an ALPHA THRESHOLD (a plain
+  `getbbox()` returns the full canvas — exported PNGs carry a sub-visible halo — which
+  rendered the mark tiny), measures the artwork's luminance, and whitens dark ink on the navy
+  theme via a CSS filter so it stays legible. To keep brand colour in dark mode instead, supply
+  a light-ink `dashboard/assets/logo_dark.png`; it is used verbatim and bypasses the filter.
 
 - **Every headline number is DERIVED from an artifact** — universe size, ablation max, the
   per-rebalance LS sequence, target std, VIF counts. Nothing about "97" is hard-coded, so a

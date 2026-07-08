@@ -86,6 +86,68 @@ def _normalize_logo(raw: bytes) -> bytes:
         return raw
 
 
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+
+ALPHA_FLOOR = 24     # ignore near-transparent halo pixels when trimming / measuring
+DARK_INK_LUMA = 95   # mean luminance below this = dark artwork, invisible on the navy theme
+
+
+def _trim_transparent(raw: bytes) -> tuple[bytes, bool]:
+    """Crop transparent padding (PRESERVING aspect ratio, unlike _normalize_logo which squares
+    the canvas and would letterbox a wide wordmark), and report whether the artwork is dark.
+
+    Trims on an alpha THRESHOLD, not `alpha > 0`: exported PNGs routinely carry a sub-visible
+    halo across the whole canvas, so a plain getbbox() returns the full canvas and trims
+    nothing — which is why the logo first rendered at 73px wide inside a 40px-tall holder.
+
+    Returns (png_bytes, is_dark_ink)."""
+    try:
+        import io
+        from PIL import Image
+    except ImportError:
+        return raw, False
+    try:
+        im = Image.open(io.BytesIO(raw)).convert("RGBA")
+        alpha = im.getchannel("A")
+        bbox = alpha.point(lambda a: 255 if a > ALPHA_FLOOR else 0).getbbox()
+        if not bbox:
+            return raw, False
+        cropped = im.crop(bbox)
+        px = [(r, g, b) for r, g, b, a in cropped.getdata() if a > ALPHA_FLOOR]
+        luma = (sum(0.299 * r + 0.587 * g + 0.114 * b for r, g, b in px) / len(px)) if px else 255
+        buf = io.BytesIO()
+        cropped.save(buf, format="PNG")
+        return buf.getvalue(), luma < DARK_INK_LUMA
+    except Exception:
+        return raw, False
+
+
+def app_logo_uri(mode: str = "dark") -> tuple[str | None, bool]:
+    """(data_uri, whiten) for the header logo, or (None, False) if no logo.png exists yet
+    (the UI then falls back to the SIGNAL·DESK wordmark placeholder).
+
+    A dark-ink logo is invisible on the navy dark theme. Two escapes, in order:
+      1. drop an `assets/logo_dark.png` — a light-ink variant, used verbatim in dark mode;
+      2. otherwise, if the artwork measures dark, the UI whitens it with a CSS filter.
+    Light mode always uses logo.png untouched.
+
+    Deliberately NOT cached: the files are a few KB, and caching would mean dropping in a new
+    logo only took effect after a server restart."""
+    if mode == "dark":
+        dark_variant = ASSETS_DIR / "logo_dark.png"
+        if dark_variant.exists():
+            png, _ = _trim_transparent(dark_variant.read_bytes())
+            return f"data:image/png;base64,{base64.b64encode(png).decode('ascii')}", False
+
+    p = ASSETS_DIR / "logo.png"
+    if not p.exists():
+        return None, False
+    png, is_dark_ink = _trim_transparent(p.read_bytes())
+    uri = f"data:image/png;base64,{base64.b64encode(png).decode('ascii')}"
+    return uri, (mode == "dark" and is_dark_ink)
+
+
 @st.cache_data(show_spinner=False)
 def logo_uris() -> dict[str, str]:
     """ticker -> base64 data URI for every cached logo in dashboard/logos/, each normalized

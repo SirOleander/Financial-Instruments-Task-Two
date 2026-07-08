@@ -54,6 +54,13 @@ def palette(mode: str) -> dict:
     return LIGHT if mode == "light" else DARK
 
 
+# ------------------------------------------------------------------ layout metrics ----- #
+NAV_GAP = 19        # px between the search box and each nav item (~0.5cm at 96dpi)
+SEARCH_W = 240      # px — narrower than before, sized so the whole group centres nicely
+LOGO_H = 40         # px — the logo holder / click-home target
+TOPBAR_H = 84       # px — sticky header height; the watchlist panel hangs below it
+
+
 # 9 sectors -> the validated categorical hue set (see module docstring). Same hues in both
 # modes, stepped for each surface's lightness band.
 SECTOR_COLORS_DARK = {
@@ -117,17 +124,42 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
        in a `stLayoutWrapper` sized to its content (73px), and a sticky element is confined to
        its containing block — so sticking the inner div made it stick for 73px and then scroll
        away. The wrapper IS a direct child of the tall page vertical block, so it sticks for
-       the whole page. This matters now the watchlist scrolls with the page: the search box is
-       the only way to jump to a company once you've scrolled down. */
+       the whole page. */
     [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{
       position:sticky; top:0; z-index:60; background:{P['bg']};
     }}
-    .st-key-topbar {{
-      border-bottom:1px solid {P['border']}; padding:10px 4px 8px; margin-bottom:14px;
-      background:{P['bg']};
-    }}
+    /* no divider between header and content (deliberate) */
+    .st-key-topbar {{ padding:10px 4px 8px; margin-bottom:14px; background:{P['bg']}; }}
     .st-key-topbar [data-testid="stHorizontalBlock"] {{ align-items:center; }}
-    .sd-logo {{ display:flex; align-items:center; gap:11px; }}
+    /* theme toggle hugs the right edge (own keyed box — a :last-child rule on stColumn would
+       also catch the last nav column, which lives in a nested horizontal block) */
+    .st-key-themebox {{ display:flex; justify-content:flex-end; }}
+
+    /* ---- logo holder: click-home target -> Ranking ---- */
+    .st-key-logohome {{ position:relative; height:{LOGO_H}px; }}
+    .st-key-logohome [data-testid="stVerticalBlock"] {{ height:100%; gap:0 !important; }}
+    .st-key-logohome [data-testid="stElementContainer"]:not([class*="st-key-logobtn"]) {{
+      height:100%; margin:0 !important; }}
+    .st-key-logohome [data-testid="stMarkdown"],
+    .st-key-logohome [data-testid="stMarkdownContainer"] {{ height:100%; margin:0 !important; }}
+    /* the transparent full-holder click target (same in-session trick as the ranking rows) */
+    .st-key-logobtn {{ position:absolute; inset:0; width:100%; height:100% !important;
+      z-index:5; margin:0 !important; }}
+    .st-key-logobtn button {{
+      width:100%; height:100% !important; min-height:0 !important; padding:0 !important;
+      background:transparent !important; border:none !important; box-shadow:none !important;
+      color:transparent !important; font-size:0 !important; cursor:pointer; }}
+    .st-key-logobtn button:hover, .st-key-logobtn button:active, .st-key-logobtn button:focus {{
+      background:transparent !important; border:none !important; box-shadow:none !important; }}
+    .st-key-logobtn button:focus-visible {{ outline:2px solid {P['accent']}; outline-offset:2px; }}
+
+    .sd-logo {{ display:flex; align-items:center; gap:11px; height:100%; }}
+    /* any aspect ratio fits the holder undistorted, in either theme */
+    .sd-logo img {{ max-height:{LOGO_H}px; max-width:100%; object-fit:contain; display:block; }}
+    /* dark-ink artwork -> white silhouette, else it disappears into the navy surface.
+       Bypassed entirely if the user supplies an assets/logo_dark.png light-ink variant. */
+    .sd-logo img.whiten {{ filter:brightness(0) invert(1); opacity:.92; }}
+    .st-key-logohome:hover .sd-logo {{ opacity:.82; }}
     .sd-logo .mark {{
       width:30px;height:30px;border-radius:8px;flex:0 0 auto;
       border:1px solid {P['border']}; display:flex;align-items:center;justify-content:center;
@@ -153,20 +185,36 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     [role="option"] {{ color:{P['text']} !important; }}
     [role="option"]:hover {{ background:{P['hover']} !important; }}
 
-    /* ---------------- top nav: FOUR STANDALONE pills beside the search ----------------
-       Not a fused segmented group — each item is its own bordered button with a real gap. */
-    .st-key-navbar [data-testid="stHorizontalBlock"] {{ gap:9px; }}
-    .st-key-navbar [data-testid="stButton"] button {{
-      width:100%; min-height:0; padding:7px 12px; border-radius:9px;
-      border:1px solid {P['border']} !important; background:{P['card']} !important;
+    /* ---------------- centred nav group: [search] [Ranking] [Model] [Data] [Backtest] -------
+       One centred group with equal {NAV_GAP}px (~0.5cm) gaps. Streamlit's columns are
+       `flex:1 1 0%` by default, which would stretch each item to an equal share of the row;
+       forcing `flex:0 0 auto` lets every item size to its content so `justify-content:center`
+       can actually centre the group. The search box gets an explicit width (it has no
+       intrinsic one). Nav items are BORDERLESS by default — outline appears on hover only. */
+    /* NB: DESCENDANT selectors, not `>`. Streamlit inserts a `stLayoutWrapper` between a keyed
+       container and its horizontal block, so child combinators silently miss (this is the same
+       trap as the sticky top bar). */
+    .st-key-navgroup [data-testid="stHorizontalBlock"] {{
+      justify-content:center !important; gap:{NAV_GAP}px !important; flex-wrap:nowrap; }}
+    .st-key-navgroup [data-testid="stColumn"] {{
+      flex:0 0 auto !important; width:auto !important; min-width:0 !important; }}
+    .st-key-navgroup [data-testid="stColumn"]:first-child {{
+      flex:0 0 {SEARCH_W}px !important; width:{SEARCH_W}px !important; }}
+    .st-key-navgroup .stTextInput, .st-key-navgroup .stTextInput input {{
+      width:{SEARCH_W}px !important; }}
+
+    .st-key-navgroup [data-testid="stButton"] button {{
+      width:auto; min-height:0; padding:7px 14px; border-radius:9px; white-space:nowrap;
+      border:1px solid transparent !important;   /* no persistent outline */
+      background:transparent !important;
       color:{P['muted']} !important; font-family:'Inter',sans-serif; font-weight:550;
       font-size:.82rem; letter-spacing:.01em; box-shadow:none !important;
       transition:color .1s ease, border-color .1s ease, background .1s ease;
     }}
-    .st-key-navbar [data-testid="stButton"] button:hover {{
+    .st-key-navgroup [data-testid="stButton"] button:hover {{
       color:{P['strong']} !important; border-color:{P['accent']}88 !important;
       background:{P['hover']} !important; }}
-    .st-key-navbar [data-testid="stButton"] button[kind="primary"] {{
+    .st-key-navgroup [data-testid="stButton"] button[kind="primary"] {{
       background:{P['accent']} !important; border-color:{P['accent']} !important;
       color:#fff !important; font-weight:650;
       box-shadow:0 2px 10px {P['accent']}4d !important; }}
@@ -205,18 +253,46 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     .st-key-themebtn button:hover {{ color:{P['strong']} !important; border-color:{P['muted']} !important; }}
 
     /* ---------------- watchlist (left column) ---------------- */
-    .st-key-watchlist {{ border-right:1px solid {P['border_soft']}; padding-right:14px; }}
+    /* ---------------- watchlist: a CONTAINED, sticky panel ----------------
+       Reversed from the earlier "scrolls with the page" behaviour: the panel now stays put
+       while the main column scrolls, and the 97 names scroll gently INSIDE it. Sticky goes on
+       the stLayoutWrapper (a direct child of the tall column), not on the keyed container —
+       same containing-block rule as the top bar. Its height is the viewport below the header,
+       so the list visually ends where the visible content area ends. */
+    [data-testid="stLayoutWrapper"]:has(> .st-key-watchlist) {{
+      position:sticky; top:{TOPBAR_H}px; z-index:10;
+      height:calc(100vh - {TOPBAR_H}px - 26px); }}
+    .st-key-watchlist {{
+      border-right:1px solid {P['border_soft']}; padding-right:14px;
+      display:flex; flex-direction:column; height:100%; min-height:0; }}
+    /* The sector selectbox + "Watchlist N" label keep their natural height... */
+    .st-key-watchlist > [data-testid="stElementContainer"] {{ flex:0 0 auto !important; }}
+    /* ...and the wrapper holding the list takes the REST of the panel. Streamlit puts a
+       `stLayoutWrapper` (flex:0 1 auto; min-height:auto) between .st-key-watchlist and
+       .st-key-colist, so without this the wrapper sizes to its 7744px of content and the
+       list's `overflow-y:auto` never has a constrained height to scroll within. */
+    .st-key-watchlist > [data-testid="stLayoutWrapper"]:has(> .st-key-colist) {{
+      flex:1 1 auto !important; min-height:0; display:flex; flex-direction:column; }}
     .sd-wl-label {{ color:{P['faint']}; font-size:.64rem; letter-spacing:.18em; text-transform:uppercase;
       font-weight:600; margin:2px 2px 8px; display:flex; justify-content:space-between; }}
     .sd-wl-label .ct {{ color:{P['muted']}; }}
-    /* The watchlist scrolls WITH THE PAGE — it is not its own scroll container. There is no
-       inner scrollbar anywhere in the app; .stMain (the page) is the single scroller. Do NOT
-       reintroduce max-height + overflow-y here: the whole column is part of the page flow, so
-       it scrolls off-screen as the user goes down, and the top-bar search is how you jump to a
-       company from anywhere. `overflow-x:hidden` alone would ALSO create a scroll container
-       (any non-visible overflow on one axis makes the other axis a scrollport), so it is gone
-       too — long tickers are clipped by the button's own text-overflow instead. */
-    .st-key-colist {{ padding-right:5px; }}
+    /* The list is the panel's only scrollable region. `min-height:0` is required: a flex item
+       defaults to min-height:auto and would refuse to shrink below its content, pushing the
+       scrollbar onto the page instead of staying inside the panel. */
+    .st-key-colist {{
+      flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding-right:6px; }}
+    /* Ticker buttons must NOT be flex-shrinkable. Streamlit gives each element container
+       `flex:1 1 0%`; inside a height-constrained flex column that collapses every row (the
+       same flex-basis:0% bug that broke the ranking click overlay), so the click targets
+       would no longer cover the visible row. Pin them to their content height. */
+    .st-key-colist [data-testid="stElementContainer"] {{ flex:0 0 auto !important; }}
+    /* gentle scrollbar */
+    .st-key-colist::-webkit-scrollbar {{ width:7px; }}
+    .st-key-colist::-webkit-scrollbar-track {{ background:transparent; }}
+    .st-key-colist::-webkit-scrollbar-thumb {{
+      background:{P['border']}; border-radius:4px; }}
+    .st-key-colist::-webkit-scrollbar-thumb:hover {{ background:{P['muted']}; }}
+    .st-key-colist {{ scrollbar-width:thin; scrollbar-color:{P['border']} transparent; }}
 
     /* icon tiles: 30px was too small to read a logo — 40px with a tighter crop */
     .st-key-colist [data-testid="stButton"] button {{
@@ -367,7 +443,16 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     """, unsafe_allow_html=True)
 
 
-def logo_html() -> str:
+def logo_html(logo_uri: str | None = None, whiten: bool = False) -> str:
+    """The real logo if dashboard/assets/logo.png exists, else the SD wordmark placeholder.
+
+    The image is height-constrained with `object-fit:contain`, so any aspect ratio (square mark
+    or wide wordmark) fits the holder without distortion. `whiten` renders dark-ink artwork as
+    a white silhouette so it is legible on the navy dark theme — see data.app_logo_uri()."""
+    if logo_uri:
+        cls = "sd-logo-img whiten" if whiten else "sd-logo-img"
+        return (f'<div class="sd-logo"><img class="{cls}" src="{logo_uri}" '
+                f'alt="Signal Desk — home"></div>')
     return ('<div class="sd-logo"><span class="mark">SD</span>'
             '<span class="wm">SIGNAL<span class="dim">·</span>DESK</span></div>')
 
