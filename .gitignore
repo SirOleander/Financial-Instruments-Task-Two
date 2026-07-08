@@ -229,3 +229,9 @@ litellm_key.sh
 
 # local DB safety backups (not versioned)
 data/*.db.bak*
+
+# Display-only OHLC cache for the dashboard's Company Detail price chart.
+# REBUILDABLE, not canonical data: `python dashboard/fetch_ohlc.py` regenerates it from
+# yfinance. It is firewalled from the modelling pipeline (nothing in src/ reads it), so
+# unlike data/financials.db it is NOT a versioned dataset.
+data/ohlc_display.db

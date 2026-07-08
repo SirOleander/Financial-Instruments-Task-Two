@@ -40,6 +40,31 @@ Release-date integrity is checked (read-only) by `src/verify_release_dates.py`.
 - **scores** — sector-percentile sub-scores (profitability, growth, cash_flow, leverage, efficiency, investment) + `financial_score`.
 - **operative_scores** — LLM competitive-advantage score (1–5, rescaled 0–1) per filing; US 10-K/10-Q + international 20-F.
 
+`data/financials.db` is the canonical, **versioned** dataset and is tracked in git.
+
+### `data/ohlc_display.db` — rebuildable, NOT tracked
+
+A **separate** SQLite file holding raw (unadjusted) OHLC, used solely to draw the dashboard's
+Company Detail price chart. It is **git-ignored**: a display cache, not canonical data.
+
+```
+python dashboard/fetch_ohlc.py            # regenerate (yfinance, 2020-01-01 → today)
+python dashboard/fetch_ohlc.py --report   # coverage only, writes nothing
+```
+
+It is **firewalled from the modelling pipeline** and must stay that way:
+
+- Nothing in `src/` reads it. No feature, target or score derives from it.
+- It is a separate *file*, not a table in `financials.db`, so the modelling database is never
+  opened for writing — its file hash is provably unchanged by the fetch.
+- `daily_prices` (**adjusted** close, in `financials.db`) remains the target's price source.
+  The OHLC store is **unadjusted** on purpose, because a chart should show prices as traded.
+  The two series differ numerically **by design** — do not "reconcile" them, or you corrupt
+  `future_63d_sharpe`.
+
+Without this file the dashboard degrades gracefully: the detail page falls back to the
+`daily_prices` adjusted-close line, then to a caption. It never errors.
+
 ## Setup
 
 - **Python 3.11**
@@ -94,11 +119,13 @@ ranking/backtesting — is the next phase (see `docs/PROJECT_SPEC.md`).
 ## Repository layout
 
 ```
-src/      pipeline modules (A_config … G_operative, price_ingest, price_target, yf_ingest,
-          verify_release_dates)
-tools/    non-pipeline diagnostics/utilities (run from repo root)
-docs/     PROJECT_SPEC.md, WORKFLOW.txt, TASK.txt, revalidate.archived.md
-data/     financials.db (the versioned dataset; tracked in git)
-outputs/  generated exports (git-ignored)
-CLAUDE.md project state, conventions, and decisions
+src/       pipeline modules (A_config … G_operative, price_ingest, price_target, yf_ingest,
+           verify_release_dates)
+dashboard/ Streamlit app (read-only) + fetch_logos.py, fetch_ohlc.py
+tools/     non-pipeline diagnostics/utilities (run from repo root)
+docs/      PROJECT_SPEC.md, WORKFLOW.txt, TASK.txt, revalidate.archived.md
+data/      financials.db     (the versioned dataset; tracked in git)
+           ohlc_display.db   (rebuildable display cache; git-ignored — see above)
+outputs/   generated exports (git-ignored)
+CLAUDE.md  project state, conventions, and decisions
 ```
