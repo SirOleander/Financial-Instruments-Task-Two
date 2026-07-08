@@ -429,7 +429,9 @@ years fetched, latest period ~2026-05-31. A clean validator run currently produc
   FinA, CommA, DiscA, StapA, HealthA, IndA, EnergyA, EnergyB),
   `FINANCIAL_ITEMS_BY_GROUP` (us-gaap concepts), `INLINE_FINANCIAL_ITEMS_BY_TICKER`
   (iXBRL fallbacks), `CALCULATED_FINANCIAL_ITEMS`, `FINANCIAL_POSITION_SIGN_RULES`,
-  `FISCAL_YEARS_TO_FETCH = 7`, `validate_config()`.
+  `FISCAL_YEARS_TO_FETCH = 6` (the value the DB was built on; earlier "7" was a doc error —
+  the constant never existed and the getattr fallback always yielded 6, now defined
+  explicitly), `validate_config()`.
   `DATABASE_PATH = BASE_DIR/data/financials.db`, where `BASE_DIR` is the parent of
   `src/`. `DECUMULATE_YTD_TICKERS` is now **dead/unused** — leave or delete.
 - **B_database.py** — SQLite at `data/financials.db`; one `financial_facts` table,

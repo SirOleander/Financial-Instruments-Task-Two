@@ -13,10 +13,11 @@ Concatenating them unchanged would have let the second shadow the first and sile
 the wrong frame to the first's call site. They are renamed apart; both keep their original
 bodies and their original call sites.
 
-NOTE (unchanged behaviour, documented divergence): `select_target_accessions` reads
-`getattr(config, "FISCAL_YEARS_TO_FETCH", config.ANNUAL_REPORTS_TO_FETCH + 1)`.
-FISCAL_YEARS_TO_FETCH is NOT defined, so the effective value is 6 — not the 7 CLAUDE.md
-claims. Preserved verbatim: defining the constant would change what a live ingest fetches.
+FISCAL YEARS: `select_target_accessions` keeps the newest `config.FISCAL_YEARS_TO_FETCH`
+fiscal years (= 6, the value the database was built on). This previously read a fragile
+`getattr(config, "FISCAL_YEARS_TO_FETCH", ANNUAL_REPORTS_TO_FETCH + 1)` where the constant
+did not exist and the fallback also yielded 6; the constant is now defined explicitly and
+the fallback removed. No behaviour change (6 == the prior effective value).
 
 Everything that talks to the SEC lives here; everything that talks to yfinance lives in
 `market.py`. That is the non-reproducible trust boundary, visible at a glance.
@@ -173,7 +174,7 @@ def select_target_accessions(filings: pd.DataFrame) -> pd.DataFrame:
     correct for both calendar-FY and non-calendar-FY filers. The newest fiscal
     year may be partially filed (current year in progress) - that is expected.
 
-    N = config.FISCAL_YEARS_TO_FETCH (fallback: ANNUAL_REPORTS_TO_FETCH + 1).
+    N = config.FISCAL_YEARS_TO_FETCH (= 6; the value the database was built on).
     """
     if filings.empty:
         return filings
@@ -193,9 +194,7 @@ def select_target_accessions(filings: pd.DataFrame) -> pd.DataFrame:
     )
     target["fiscal_year"] = _assign_fiscal_year(target["reportDate"], fiscal_year_end_month)
 
-    years_to_fetch = getattr(
-        config, "FISCAL_YEARS_TO_FETCH", config.ANNUAL_REPORTS_TO_FETCH + 1
-    )
+    years_to_fetch = config.FISCAL_YEARS_TO_FETCH
     available_years = sorted(target["fiscal_year"].dropna().unique())
     keep_years = set(available_years[-years_to_fetch:])
 

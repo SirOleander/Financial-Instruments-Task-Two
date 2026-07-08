@@ -39,6 +39,14 @@ ANNUAL_REPORTS_TO_FETCH = 5
 QUARTERLY_REPORTS_TO_FETCH = 15
 TARGET_CURRENCY = "USD"
 
+# Number of most-recent fiscal years to keep per ticker in select_target_accessions.
+# The database was built and verified on 6. This constant did NOT previously exist: the
+# call site read `getattr(config, "FISCAL_YEARS_TO_FETCH", ANNUAL_REPORTS_TO_FETCH + 1)`,
+# whose fallback (5 + 1) is also 6, so the effective value has always been 6. It is now
+# defined explicitly (the old CLAUDE.md "7" was a documentation error — the constant was
+# never present, so the "7" never took effect). Making it real removes the fragile fallback.
+FISCAL_YEARS_TO_FETCH = 6
+
 # --- Risk-free rate (the SINGLE definition; imported by price_target.py and K_backtest.py) ---
 # CONSTANT 2.0% annualized. Source/rationale: approximately the average 3-month US Treasury
 # bill yield (FRED series TB3MS, https://fred.stlouisfed.org/series/TB3MS) over the 2020-2026
