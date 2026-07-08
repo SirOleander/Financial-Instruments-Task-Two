@@ -8,20 +8,35 @@ plan (17 steps, all signal formulas, scoring rubric, backtest spec) lives in
 here.
 
 ================================================================================
-## MILESTONE — UNIVERSE EXPANDED 89 → 98 (the mandated fixed 98-stock list).
-## Supersedes the "89 companies" statements below where they conflict.
+## MILESTONE — FINAL UNIVERSE = 97 (98 mandated − GOOG, a DOCUMENTED dedup).
+## Supersedes the "89 companies" / "98" statements below where they conflict.
 ================================================================================
-The assignment mandates a FIXED 98-stock universe; we had trimmed 9 for data quality,
-which the task does NOT authorize. All 9 re-added (Task-Two) ADDITIVELY — the original 89's
-`financial_facts` / `daily_prices` rows were proven byte-identical (content-hash) before/after.
-Backup at `data/financials.db.bak_before9`.
+The assignment mandates a FIXED 98-stock universe; we had trimmed 9 for data quality, which
+the task does NOT authorize, so all 9 were re-added ADDITIVELY (the original 89's
+`financial_facts` / `daily_prices` rows proven byte-identical by content-hash before/after).
+**Then GOOG was deliberately dropped again → the working universe is 97.**
+
+### GOOG DROPPED — a STATED, DOCUMENTED deviation (97 of 98), NOT a silent drop
+- **Rationale:** GOOG (Alphabet Class C) and GOOGL (Class A) are the SAME issuer, one SEC
+  filer, one CIK (0001652044) → **byte-identical fundamentals**. Keeping both would double-
+  weight Alphabet in every sector-percentile peer group, in training, and in the long/short
+  book, while adding zero information (identical features; only the share-class price, hence
+  the target, differs marginally). Dropping the duplicate class is **deliberate deduplication
+  of dual share classes**, consistent with how other multi-listing cases were handled.
+- **We keep GOOGL, drop GOOG.** This MUST be stated in the report/presentation as a documented
+  deviation from the mandated list (97 of 98 analysed), with the dedup rationale.
+- Mechanics: removed from `A_config` (COMPANIES / COMPANY_NAMES / SECTOR_BY_TICKER /
+  ACTIVE_TICKERS / COMPANY_GROUPS['CommA']) and DELETED from all 7 tables. Backup at
+  `data/financials.db.bak_before_goog_drop`.
+- **Verified surgical:** the other 97 names' rows are byte-identical (md5) in the five
+  ticker-INDEPENDENT tables (financial_facts, daily_prices, kpi_values, target_63d,
+  operative_scores). `scores` legitimately CHANGED **for Communication names only** (the
+  sector-percentile peer group shrank 8→7); every other sector's scores are byte-identical.
+  `modelling_data` + `predictions/` + `analysis/` were regenerated on 97.
 
 ### The 9 re-added + per-name outcome (diagnostic-driven, data in hand):
-- **GOOG** (EDGAR, CIK = GOOGL's 0001652044, CommA): Alphabet Class C — fundamentals
-  IDENTICAL to GOOGL (same filer). Full training twin (18 train rows); operative COPIED
-  from GOOGL. **KNOWN MINOR REDUNDANCY: GOOG & GOOGL are near-duplicate training rows**
-  (identical features, slightly different targets from different share-class prices). BOTH
-  kept (both mandated); double-weighting is negligible on a near-null model — accepted.
+- **GOOG** (EDGAR, CIK = GOOGL's 0001652044, CommA): re-added, then **DROPPED as the Alphabet
+  dedup — see the block above.** Not in the universe.
 - **GEV** (EDGAR, CIK 0001996810, IndA): GE Vernova, spun off 2024 → short history; cleared
   the uniform floor-6 (6 train rows) so it TRAINS. Operative falls back (no LITELLM_API_KEY
   at rebuild time; can be LLM-scored later).
@@ -44,13 +59,13 @@ filters `release IS NOT NULL`, so blocked names get no target. `H_modelling` add
 (absent → target_missing). New config: `A_config` GOOG/GEV; `yf_ingest.UNIVERSE` +7 non-US
 (with `FIN`/`STAP` position lists + `NO_RELEASE_DATE_NAMES`).
 
-### 98-state table coverage (all six data tables rebuilt coherently, in order
-### kpi_values → scores → target_63d → operative(copy) → modelling_data):
-financial_facts 98 / daily_prices 98 / kpi_values 98 / scores 98 / modelling_data 98 tickers;
-target_63d 94 (4 blocked excluded); operative_scores 83 (US 10-K/20-F + GOOG copy).
-modelling_data: 1,733 rows, **1,332 train_eligible across 73 companies** (71 US + GOOG + GEV),
-401 prediction-only. **NOTE: predictions/ (model, ranking, backtest) + the dashboard are
-retrained/refreshed on 98 as the NEXT step — treat as stale until then.**
+### 97-state table coverage (rebuild order: kpi_values → scores → target_63d → operative →
+### modelling_data → predictions/ → analysis/). ALL COHERENT AT 97:
+financial_facts 26,500 / daily_prices 156,666 / kpi_values 40,996 / scores 1,712 /
+modelling_data 1,712 — all **97 tickers**; target_63d 1,690 (93 tickers; 4 blocked names have
+no targets); operative_scores 1,597 (82 tickers; US 10-K/20-F only).
+modelling_data: **1,314 train_eligible across 72 companies** (70 US + GOOGL + GEV),
+398 prediction-only. predictions_all89.csv (filename kept for the dashboard) holds all **97**.
 
 ### Final universe: 89 companies, TWO sources in one `financial_facts` table
 NOTE: superseded — universe is now 98 (see the 89→98 milestone above). Original 89 detail:
@@ -221,15 +236,15 @@ of existing modelling_data columns (NOT a schema change):
 forward 63-day Sharpe on this universe/period. This is the RESULT, not a bug — do NOT try to
 tune it into a positive one.** It is exactly what market efficiency predicts, and the
 DELIVERABLE is the leak-free end-to-end methodology, not alpha. Preserve this conclusion.
-- **NULL HOLDS ON THE FULL MANDATED 98** (retrained after the 89→98 expansion): train+val
-  1039 rows / 73 companies, test 293. CV Spearman ∈ [−0.034,+0.013] (Lasso/EN still degenerate
-  to null); ensemble test Spearman −0.029; ablation max |CV|=0.040 — same near-zero. Backtest
-  (4 quarterly rebalances) long-short +0.15/−0.05/−0.17/+0.11, cum ≈ 0% (@10bps −0.06%, @0bps
-  +1.15%), ann Sharpe ~0.11, maxDD −21%; both legs +~50% in the bull market, no spread. The
-  result is robust to the universe expansion. predictions_all89.csv now holds all 98 (filename
-  kept for dashboard) with flags out_of_training_dist / prediction_only (25) / no_release_date
-  (5). GOOG & GOOGL predict identically (twins, adjacent ranks) — accepted redundancy.
-- Numbers below are the ORIGINAL 89-run (kept for reference; superseded by the 98 line above).
+- **NULL HOLDS ON THE FINAL 97** (retrained after the GOOG dedup; these are the CURRENT
+  numbers): train+val 1025 rows / 72 companies, test 289. CV Spearman ∈ [−0.031,+0.012]
+  (Lasso/EN still degenerate to null); ensemble test Spearman −0.019; ablation max |CV|=0.034.
+  Backtest (4 quarterly rebalances) long-short +0.18/−0.05/−0.20/+0.08, cum −2.4% gross
+  (−3.6% @10bps), ann Sharpe ~0.05 (0.01 @10bps), maxDD −24%; both legs +~47% in the bull
+  market, no spread. The null is robust to the 89→98 expansion AND to the GOOG dedup.
+  predictions_all89.csv (filename kept for dashboard) holds all **97** with flags
+  out_of_training_dist / prediction_only (25) / no_release_date (5).
+- Numbers below are the ORIGINAL 89-run (kept for reference; superseded by the 97 line above).
 - **Pipeline (J_models.py):** time split at 2025-03-31 (train+val 1023 rows ≤ split; untouched
   12-month test 285 rows > split, touched once). TimeSeriesSplit CV (5 folds, purge gap=21) on
   train+val. ALL preprocessing refit per fold inside a Pipeline (ratio-tail + change
@@ -255,7 +270,7 @@ DELIVERABLE is the leak-free end-to-end methodology, not alpha. Preserve this co
   ablation_results, coef_/importance_*, predictions_all89, backtest_periods/holdings/summary,
   fig_backtest_equity.png, MODEL_SUMMARY.md, BACKTEST_SUMMARY.md.
 
-### SLIDE-24 GRADING ITEMS — DONE on the 98 model (src/L_analysis.py → `analysis/`)
+### SLIDE-24 GRADING ITEMS — DONE, regenerated on the FINAL 97 model (src/L_analysis.py → `analysis/`)
 Additive + read-only (DB and `predictions/` untouched). Same leak-safe protocol as J_models
 (time split 2025-03-31, TimeSeriesSplit(5, gap=21), all preprocessing refit per fold).
 
@@ -263,14 +278,14 @@ Additive + read-only (DB and `predictions/` untouched). Same leak-safe protocol 
 WAS WRONG; the data shows TWO failure modes with one identical outcome. Do NOT restate the
 old assumption — use this:**
 - **Underfit / high-bias, ~ZERO variance:** Lasso & ElasticNet regularize EVERY coefficient to
-  exactly 0 → they literally ARE the mean-predictor (train RMSE 1.945 ≈ val 1.966, train ρ =
+  exactly 0 → they literally ARE the mean-predictor (train RMSE 1.954 ≈ val 1.966, train ρ =
   val ρ = 0).
-- **Overfit / HIGH variance, zero payoff:** XGBoost train ρ **+0.949** vs val −0.023; SVR
-  +0.924/−0.007; RandomForest +0.806/−0.028 (train RMSE 0.78–1.55 vs val 2.00–2.18). They
+- **Overfit / HIGH variance, zero payoff:** SVR train ρ **+0.923** vs val +0.001; XGBoost
+  +0.842/−0.015; RandomForest +0.679/−0.015 (train RMSE 0.86–1.70 vs val 1.99–2.17). They
   memorize the training rows and generalize at zero — the capacity is spent fitting NOISE.
-  Ridge in between (train ρ +0.300, val −0.034). Calling these "low-variance" is FALSE.
-- **Learning curves are FLAT in training size** (RF val RMSE 1.864→1.853, XGB 2.036→2.007 as
-  rows 121→811; target std 1.983). If variance were the binding constraint validation error
+  Ridge in between (train ρ +0.299, val −0.031). Calling these "low-variance" is FALSE.
+- **Learning curves are FLAT in training size** (RF val RMSE 1.807→1.837, XGB 2.007→1.957 as
+  rows 119→799; target std ≈1.98). If variance were the binding constraint validation error
   would FALL with more data — it does not.
 - **Conclusion:** total error dominated by **irreducible noise + bias**, not variance. More
   data / more capacity / more tuning cannot fix this — **only a genuinely more informative
@@ -282,20 +297,21 @@ old assumption — use this:**
   statement of the null: no linear combination beats the intercept.
 - Ridge: 48/48 non-zero but tiny; RF/XGB importances spread thinly (no dominant split var);
   SVR explained via permutation importance on VALIDATION folds (never test).
-- Rank-consensus top-5: growth_score_change, profitability_score,
-  operating_cash_flow_growth_yoy_change, operating_margin_change, equity_ratio_change —
-  mostly CHANGE features. **Magnitudes are trivial; this ranks near-noise.** Interpretability
-  CONFIRMS the null, it does not rescue it.
+- Rank-consensus top-5: growth_score_change, operating_margin_change, equity_ratio_change,
+  profitability_score, return_on_assets_change — mostly CHANGE features. **Magnitudes are
+  trivial; this ranks near-noise.** Interpretability CONFIRMS the null, it does not rescue it.
 
 **3. Classification lens — near-chance, confirms the regression null.**
 - Label = top-third vs bottom-third realized future_63d_sharpe (middle dropped), matching the
   long/short framing. **LEAK CONTROL: tercile cutoffs fit on TRAIN ROWS ONLY** — per CV fold
   from that fold's train rows; from train+val for the one-shot test. Test outcomes never
   inform any cutoff; no cutoff fit on the pooled data.
-- Test AUC 0.521–0.529 (chance 0.500); CV AUC mostly BELOW 0.5 → sign disagreement = noise.
-- **Majority baseline acc = 0.587** (train-fitted cutoff + higher test-regime Sharpes leave the
-  test set 58.7% one class), so every model's raw accuracy is BELOW that baseline. Read AUC and
-  balanced accuracy (~0.5). Balanced within-period variant (50/50) reproduces: AUC 0.452–0.536.
+- Test AUC 0.434–0.546 (chance 0.500); CV AUC 0.479–0.529, mostly BELOW 0.5 → sign
+  disagreement = noise. SVM is BELOW chance on test (0.434).
+- **Majority baseline acc = 0.579** (train-fitted cutoff + higher test-regime Sharpes leave the
+  test set 57.9% one class), so raw accuracy (0.505–0.554) is at/below that baseline. Read AUC
+  and balanced accuracy (~0.5). Balanced within-period variant (50/50) reproduces: AUC
+  0.434–0.549.
 - Verdict: a classification framing gives the SAME answer — cannot separate future winners from
   losers better than chance.
 

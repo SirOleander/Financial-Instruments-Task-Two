@@ -1,81 +1,81 @@
 period,leg,ticker,sector,pred,realized_63d_return,out_of_training_dist
-2025Q1,long,SCHW,Banks,2.623,0.1468,0
-2025Q1,long,GEV,Industrials,2.3403,0.7316,0
-2025Q1,long,RTX,Industrials,1.7869,0.3077,0
-2025Q1,long,GE,Industrials,1.7508,0.3608,0
-2025Q1,long,PLTR,Technology,1.6705,0.6251,0
-2025Q1,long,UBER,Consumer Discretionary,1.666,0.126,0
-2025Q1,long,IBM,Technology,1.5777,0.1249,0
-2025Q1,long,SPGI,Financial Services,1.437,0.0605,0
-2025Q1,long,VZ,Communication,1.3802,0.0154,0
-2025Q1,long,GS,Banks,1.3592,0.304,0
-2025Q1,short,PEP,Consumer Staples,0.1664,0.0873,0
-2025Q1,short,NEE,"Energy, Materials & Utilities",0.132,0.0935,0
-2025Q1,short,TMO,Healthcare,0.13,0.1061,0
-2025Q1,short,LRCX,Technology,0.1078,0.3814,0
-2025Q1,short,CVX,"Energy, Materials & Utilities",0.0617,0.1329,0
-2025Q1,short,MRK,Healthcare,0.0525,-0.0263,0
-2025Q1,short,META,Communication,0.0061,0.2572,0
-2025Q1,short,V,Financial Services,-0.044,0.0105,0
-2025Q1,short,AAPL,Technology,-0.0743,0.0238,0
-2025Q1,short,BAC,Banks,-0.2656,0.1837,0
-2025Q2,long,MS,Banks,1.9821,0.1747,0
-2025Q2,long,APP,Technology,1.8901,0.3918,0
-2025Q2,long,COST,Consumer Staples,1.8512,-0.0494,0
-2025Q2,long,INTU,Technology,1.7537,-0.0786,0
-2025Q2,long,JPM,Banks,1.7137,0.0669,0
-2025Q2,long,SCHW,Banks,1.6287,-0.0351,0
-2025Q2,long,PLTR,Technology,1.4673,0.1539,0
-2025Q2,long,UNH,Healthcare,1.4435,0.2473,0
-2025Q2,long,GEV,Industrials,1.443,-0.0615,0
-2025Q2,long,CRM,Technology,1.4295,-0.0393,0
-2025Q2,short,TMO,Healthcare,0.0074,0.1932,0
-2025Q2,short,SHEL.L,"Energy, Materials & Utilities",0.0007,0.0624,1
-2025Q2,short,NOVN.SW,Healthcare,-0.0026,0.1273,1
-2025Q2,short,MRK,Healthcare,-0.0277,0.0487,0
-2025Q2,short,005930.KS,Technology,-0.0631,0.4152,1
-2025Q2,short,ASML.AS,Technology,-0.104,0.3015,1
-2025Q2,short,KO,Consumer Staples,-0.2736,0.0316,0
-2025Q2,short,NEE,"Energy, Materials & Utilities",-0.2869,0.176,0
-2025Q2,short,BA,Industrials,-0.4943,-0.0126,0
-2025Q2,short,BLK,Financial Services,-0.5235,-0.0431,0
-2025Q3,long,C,Banks,2.0509,0.2344,0
-2025Q3,long,MA,Financial Services,2.0441,0.0076,0
-2025Q3,long,HD,Consumer Discretionary,1.7565,-0.1709,0
-2025Q3,long,KLAC,Technology,1.5957,0.1137,0
-2025Q3,long,SPGI,Financial Services,1.4778,0.0852,0
-2025Q3,long,APP,Technology,1.4668,-0.3454,0
-2025Q3,long,MS,Banks,1.4388,0.104,0
-2025Q3,long,000660.KS,Technology,1.4049,0.5082,1
-2025Q3,long,BAC,Banks,1.3472,0.0219,0
-2025Q3,long,SHEL.L,"Energy, Materials & Utilities",1.328,-0.0187,1
-2025Q3,short,TD.TO,Banks,0.2173,0.1459,1
-2025Q3,short,SIE.DE,Industrials,0.1945,0.057,1
-2025Q3,short,APH,Technology,0.1639,0.2256,0
-2025Q3,short,VZ,Communication,0.1363,0.1625,0
-2025Q3,short,AMAT,Technology,0.1307,0.447,0
-2025Q3,short,ASML.AS,Technology,0.0995,0.3123,1
-2025Q3,short,LRCX,Technology,0.0592,0.5223,0
-2025Q3,short,NOVO-B.CO,Healthcare,0.052,0.0132,1
-2025Q3,short,NOVN.SW,Healthcare,0.0323,0.1903,1
-2025Q3,short,JNJ,Healthcare,-0.0026,0.151,0
-2025Q4,long,6758.T,Consumer Discretionary,1.7782,0.0975,1
-2025Q4,long,QCOM,Technology,1.6728,0.4219,0
-2025Q4,long,PG,Consumer Staples,1.428,-0.0013,0
-2025Q4,long,ASML.AS,Technology,1.3369,-0.0154,1
-2025Q4,long,COST,Consumer Staples,1.2131,0.1353,0
-2025Q4,long,CSCO,Technology,1.1285,0.0157,0
-2025Q4,long,RY.TO,Banks,1.1279,-0.0,1
-2025Q4,long,TSM,Technology,1.0562,0.0851,1
-2025Q4,long,WMT,Consumer Staples,0.9872,0.0802,0
-2025Q4,long,ALV.DE,Financial Services,0.9542,0.0444,1
-2025Q4,short,ACN,Technology,0.1573,-0.2653,0
-2025Q4,short,DIS,Communication,0.1543,-0.0279,0
-2025Q4,short,8306.T,Banks,0.1488,0.0358,1
-2025Q4,short,SHEL.L,"Energy, Materials & Utilities",0.129,0.1185,1
-2025Q4,short,HSBA.L,Banks,0.0935,-0.0107,1
-2025Q4,short,TD.TO,Banks,0.0794,0.0683,1
-2025Q4,short,AZN.L,Healthcare,0.0475,-0.0709,1
-2025Q4,short,SAP.DE,Technology,0.0403,-0.1469,1
-2025Q4,short,NVDA,Technology,0.0042,0.0605,0
-2025Q4,short,MSFT,Technology,-0.3796,-0.0186,0
+2025Q1,long,SCHW,Banks,2.6322,0.1468,0
+2025Q1,long,GEV,Industrials,2.4122,0.7316,0
+2025Q1,long,RTX,Industrials,1.9154,0.3077,0
+2025Q1,long,GE,Industrials,1.8768,0.3608,0
+2025Q1,long,UBER,Consumer Discretionary,1.7294,0.126,0
+2025Q1,long,IBM,Technology,1.6752,0.1249,0
+2025Q1,long,PLTR,Technology,1.4589,0.6251,0
+2025Q1,long,TSLA,Consumer Discretionary,1.4358,0.1764,0
+2025Q1,long,SPGI,Financial Services,1.4288,0.0605,0
+2025Q1,long,VZ,Communication,1.4046,0.0154,0
+2025Q1,short,NEE,"Energy, Materials & Utilities",0.1267,0.0935,0
+2025Q1,short,MRK,Healthcare,0.1093,-0.0263,0
+2025Q1,short,TXN,Technology,0.0873,0.1456,0
+2025Q1,short,META,Communication,0.0591,0.2572,0
+2025Q1,short,MCD,Consumer Discretionary,0.0433,-0.0173,0
+2025Q1,short,TMO,Healthcare,0.0329,0.1061,0
+2025Q1,short,CVX,"Energy, Materials & Utilities",0.0273,0.1329,0
+2025Q1,short,AAPL,Technology,-0.0403,0.0238,0
+2025Q1,short,V,Financial Services,-0.0451,0.0105,0
+2025Q1,short,BAC,Banks,-0.2104,0.1837,0
+2025Q2,long,APP,Technology,2.0171,0.3918,0
+2025Q2,long,MS,Banks,1.9917,0.1747,0
+2025Q2,long,INTU,Technology,1.8852,-0.0786,0
+2025Q2,long,COST,Consumer Staples,1.8039,-0.0494,0
+2025Q2,long,JPM,Banks,1.6231,0.0669,0
+2025Q2,long,SCHW,Banks,1.6187,-0.0351,0
+2025Q2,long,UNH,Healthcare,1.4925,0.2473,0
+2025Q2,long,PLTR,Technology,1.4743,0.1539,0
+2025Q2,long,GEV,Industrials,1.4452,-0.0615,0
+2025Q2,long,UBER,Consumer Discretionary,1.4418,0.0216,0
+2025Q2,short,ASML.AS,Technology,0.0874,0.3015,1
+2025Q2,short,005930.KS,Technology,-0.0065,0.4152,1
+2025Q2,short,TMO,Healthcare,-0.0258,0.1932,0
+2025Q2,short,SHEL.L,"Energy, Materials & Utilities",-0.0788,0.0624,1
+2025Q2,short,MRK,Healthcare,-0.0839,0.0487,0
+2025Q2,short,NOVN.SW,Healthcare,-0.1947,0.1273,1
+2025Q2,short,NEE,"Energy, Materials & Utilities",-0.2732,0.176,0
+2025Q2,short,KO,Consumer Staples,-0.2952,0.0316,0
+2025Q2,short,BA,Industrials,-0.4075,-0.0126,0
+2025Q2,short,BLK,Financial Services,-0.4305,-0.0431,0
+2025Q3,long,MA,Financial Services,2.0957,0.0076,0
+2025Q3,long,C,Banks,1.9278,0.2344,0
+2025Q3,long,HD,Consumer Discretionary,1.8621,-0.1709,0
+2025Q3,long,KLAC,Technology,1.6779,0.1137,0
+2025Q3,long,MS,Banks,1.4946,0.104,0
+2025Q3,long,SPGI,Financial Services,1.4502,0.0852,0
+2025Q3,long,APP,Technology,1.4097,-0.3454,0
+2025Q3,long,BRK-B,Financial Services,1.3365,0.0332,0
+2025Q3,long,META,Communication,1.3325,0.0904,0
+2025Q3,long,SHEL.L,"Energy, Materials & Utilities",1.3248,-0.0187,1
+2025Q3,short,AMAT,Technology,0.1906,0.447,0
+2025Q3,short,7203.T,Consumer Discretionary,0.1861,0.188,1
+2025Q3,short,VZ,Communication,0.181,0.1625,0
+2025Q3,short,JNJ,Healthcare,0.1136,0.151,0
+2025Q3,short,9988.HK,Consumer Discretionary,0.1078,-0.1189,1
+2025Q3,short,NOVO-B.CO,Healthcare,0.0714,0.0132,1
+2025Q3,short,APH,Technology,0.0267,0.2256,0
+2025Q3,short,ASML.AS,Technology,0.0236,0.3123,1
+2025Q3,short,LRCX,Technology,0.0162,0.5223,0
+2025Q3,short,NOVN.SW,Healthcare,-0.0867,0.1903,1
+2025Q4,long,6758.T,Consumer Discretionary,1.7002,0.0975,1
+2025Q4,long,QCOM,Technology,1.6502,0.4219,0
+2025Q4,long,PG,Consumer Staples,1.5083,-0.0013,0
+2025Q4,long,ASML.AS,Technology,1.4163,-0.0154,1
+2025Q4,long,COST,Consumer Staples,1.2576,0.1353,0
+2025Q4,long,CSCO,Technology,1.1286,0.0157,0
+2025Q4,long,TSM,Technology,1.078,0.0851,1
+2025Q4,long,RY.TO,Banks,1.0037,-0.0,1
+2025Q4,long,9988.HK,Consumer Discretionary,0.9421,-0.1955,1
+2025Q4,long,WMT,Consumer Staples,0.8939,0.0802,0
+2025Q4,short,SAP.DE,Technology,0.1526,-0.1469,1
+2025Q4,short,NOVO-B.CO,Healthcare,0.1216,0.0034,1
+2025Q4,short,ORCL,Technology,0.0481,-0.1768,0
+2025Q4,short,SHEL.L,"Energy, Materials & Utilities",0.0457,0.1185,1
+2025Q4,short,DIS,Communication,0.0403,-0.0279,0
+2025Q4,short,TD.TO,Banks,0.0371,0.0683,1
+2025Q4,short,HSBA.L,Banks,0.0339,-0.0107,1
+2025Q4,short,AZN.L,Healthcare,-0.099,-0.0709,1
+2025Q4,short,NVDA,Technology,-0.1061,0.0605,0
+2025Q4,short,MSFT,Technology,-0.3998,-0.0186,0
