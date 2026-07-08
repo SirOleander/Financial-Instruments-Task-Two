@@ -104,6 +104,137 @@ def time_line(df: pd.DataFrame, xcol: str, ycol: str, mode: str, *, y_title: str
     return _themed(alt.layer(*layers).properties(height=height), P)
 
 
+def train_val_dumbbell(df: pd.DataFrame, mode: str, height: int = 230) -> alt.Chart:
+    """Bias-variance in one read: a rule from TRAIN rho to VALIDATION rho per model.
+
+    A long bar = the model memorised the training rows and generalised at zero (variance);
+    a dot-on-dot at zero = it regularised to the mean predictor (bias). Both land on the same
+    validation point. Two series -> legend + direct labels (identity never colour-alone).
+    df: [model, train_spearman, val_spearman], pre-sorted."""
+    P = ui.palette(mode)
+    order = df["model"].tolist()
+    # labelOverlap=False: with 6 models in ~230px Vega silently drops every other label
+    enc_y = alt.Y("model:N", sort=order, title=None,
+                  axis=alt.Axis(labelFont="IBM Plex Mono", labelLimit=160, labelOverlap=False))
+    base = alt.Chart(df)
+
+    connector = base.mark_rule(color=P["faint"], size=2, opacity=.55).encode(
+        y=enc_y, x="train_spearman:Q", x2="val_spearman:Q")
+
+    long = df.melt(id_vars="model", value_vars=["train_spearman", "val_spearman"],
+                   var_name="Split", value_name="rho")
+    long["Split"] = long["Split"].map({"train_spearman": "Train", "val_spearman": "Validation"})
+    cmap = {"Train": P["faint"], "Validation": P["accent"]}
+    pts = alt.Chart(long).mark_point(size=110, filled=True, opacity=1,
+                                     stroke=P["bg"], strokeWidth=2).encode(
+        y=alt.Y("model:N", sort=order, title=None),
+        x=alt.X("rho:Q", title="Spearman rank correlation",
+                scale=alt.Scale(domain=[-0.15, 1.0], nice=False)),
+        color=alt.Color("Split:N",
+                        scale=alt.Scale(domain=list(cmap), range=list(cmap.values())),
+                        legend=alt.Legend(orient="top", title=None, labelColor=P["text"])),
+        tooltip=[alt.Tooltip("model:N", title=""), alt.Tooltip("Split:N", title=""),
+                 alt.Tooltip("rho:Q", format="+.3f", title="Spearman")],
+    )
+    zero = (alt.Chart(pd.DataFrame({"z": [0]}))
+            .mark_rule(color=P["strong"], size=1.5).encode(x="z:Q"))
+    return _themed(alt.layer(zero, connector, pts).properties(height=height), P)
+
+
+def learning_curve(df: pd.DataFrame, mode: str, ref: float, height: int = 240) -> alt.Chart:
+    """Train vs validation RMSE against an expanding chronological training prefix.
+
+    The dashed rule is the target's own std — a mean-predictor's RMSE. Validation sitting
+    flat on that rule as data grows is the evidence that VARIANCE is not the binding
+    constraint. One y-axis only (both series are RMSE in the same units)."""
+    P = ui.palette(mode)
+    long = df.melt(id_vars="n_train", value_vars=["train_rmse", "val_rmse"],
+                   var_name="Split", value_name="rmse")
+    long["Split"] = long["Split"].map({"train_rmse": "Train", "val_rmse": "Validation"})
+    cmap = {"Train": P["faint"], "Validation": P["accent"]}
+    # tick only at the 8 real prefix sizes — a quantitative axis otherwise invents ~35 ticks
+    ticks = sorted(df["n_train"].unique().tolist())
+    line = alt.Chart(long).mark_line(
+        strokeWidth=2, point=alt.OverlayMarkDef(size=44, filled=True)).encode(
+        x=alt.X("n_train:Q", title="training rows (expanding chronological prefix)",
+                scale=alt.Scale(nice=False, zero=False, padding=14),
+                axis=alt.Axis(values=ticks, labelOverlap=False)),
+        y=alt.Y("rmse:Q", title="RMSE", scale=alt.Scale(zero=False, nice=True)),
+        color=alt.Color("Split:N",
+                        scale=alt.Scale(domain=list(cmap), range=list(cmap.values())),
+                        legend=alt.Legend(orient="top", title=None, labelColor=P["text"])),
+        tooltip=[alt.Tooltip("Split:N", title=""), alt.Tooltip("n_train:Q", title="rows"),
+                 alt.Tooltip("rmse:Q", format=".3f", title="RMSE")],
+    )
+    # the reference is a NEUTRAL baseline, not a bad-status line: red/green are reserved for
+    # performance semantics, and colouring "you're no better than the mean" red would imply
+    # a status this chart is not encoding.
+    rule = (alt.Chart(pd.DataFrame({"y": [ref]}))
+            .mark_rule(color=P["muted"], strokeDash=[5, 4], size=1.4).encode(y="y:Q"))
+    label = (alt.Chart(pd.DataFrame({"y": [ref], "t": ["mean-predictor RMSE (target std)"]}))
+             .mark_text(align="left", dx=6, dy=-7, color=P["muted"], fontSize=10, font="Inter")
+             .encode(y="y:Q", text="t:N"))
+    return _themed(alt.layer(rule, label, line).properties(height=height), P)
+
+
+def auc_bars(df: pd.DataFrame, mode: str, height: int = 210) -> alt.Chart:
+    """Classification AUC per model, drawn as the DEVIATION FROM CHANCE (auc - 0.5).
+
+    Two deliberate choices:
+      * Bars measure `auc - 0.5`, not `auc`, off a zero baseline that IS chance. Drawing raw
+        AUC bars from 0 on a truncated [0.40,0.60] axis would exaggerate differences between
+        models that are all indistinguishable from chance — a truncated-bar-axis lie. Here
+        bar length is literally "how far from chance", and a near-zero bar reads as such.
+      * Neutral fill: these hug chance, and colouring noise green/red would dramatise a
+        result that is not there.
+    Direct labels carry the true AUC, so no information is lost by plotting the deviation.
+    df: [model, auc], pre-sorted."""
+    P = ui.palette(mode)
+    d = df.copy()
+    d["dev"] = d["auc"] - 0.5
+    order = d["model"].tolist()
+    span = max(0.08, float(d["dev"].abs().max()) * 1.45)
+    base = alt.Chart(d)
+    enc_y = alt.Y("model:N", sort=order, title=None,
+                  axis=alt.Axis(labelFont="IBM Plex Mono", labelLimit=180, labelOverlap=False))
+
+    bars = base.mark_bar(size=15, color=P["faint"], cornerRadius=3).encode(
+        y=enc_y,
+        x=alt.X("dev:Q", title="AUC − 0.5   (0 = chance)",
+                scale=alt.Scale(domain=[-span, span], nice=False),
+                axis=alt.Axis(format="+.3f")),
+        tooltip=[alt.Tooltip("model:N", title=""),
+                 alt.Tooltip("auc:Q", format=".3f", title="AUC"),
+                 alt.Tooltip("dev:Q", format="+.3f", title="vs chance")])
+    # label the TRUE auc, flipped to whichever side the bar points. `align`/`dx` are mark
+    # properties (not encoding channels) in this Altair, so use two filtered layers.
+    def _lab(pos: bool):
+        return (base.transform_filter(
+                    alt.datum.dev >= 0 if pos else alt.datum.dev < 0)
+                .mark_text(align="left" if pos else "right", dx=5 if pos else -5,
+                           color=P["text"], fontSize=10, font="IBM Plex Mono")
+                .encode(y=enc_y, x="dev:Q", text=alt.Text("auc:Q", format=".3f")))
+
+    chance = (alt.Chart(pd.DataFrame({"z": [0]}))
+              .mark_rule(color=P["strong"], size=1.6).encode(x="z:Q"))
+    return _themed(
+        alt.layer(bars, _lab(True), _lab(False), chance).properties(height=height), P)
+
+
+def importance_bar(df: pd.DataFrame, cat: str, val: str, mode: str, *, x_title: str,
+                   height: int = 300) -> alt.Chart:
+    """Horizontal importance bars, neutral fill (importance is magnitude, not polarity)."""
+    P = ui.palette(mode)
+    order = df[cat].tolist()
+    base = alt.Chart(df)
+    enc_y = alt.Y(f"{cat}:N", sort=order, title=None,
+                  axis=alt.Axis(labelFont="IBM Plex Mono", labelLimit=240))
+    bars = base.mark_bar(size=12, color=P["accent"], cornerRadius=3, opacity=.85).encode(
+        y=enc_y, x=alt.X(f"{val}:Q", title=x_title, scale=alt.Scale(nice=True)),
+        tooltip=[alt.Tooltip(f"{cat}:N", title=""), alt.Tooltip(f"{val}:Q", format=".4f")])
+    return _themed(bars.properties(height=height), P)
+
+
 def equity_lines(df: pd.DataFrame, mode: str, order: list[str],
                  color_map: dict[str, str], height: int = 300) -> alt.Chart:
     """Multi-series 'growth of $1' line chart. df tidy: [Point, Series, Value]. A dashed

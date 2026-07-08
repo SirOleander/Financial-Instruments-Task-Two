@@ -1,11 +1,16 @@
 # Streamlit theme — "Signal Desk" quant-research terminal (deliberate, not the default).
 # Read when running `streamlit run dashboard/app.py` from the repo root.
+#
+# These values MUST track dashboard/ui.py's DARK palette. Streamlit renders its own
+# widgets (segmented control active state, checkboxes, dataframe selection) from THIS
+# theme, not from our injected CSS — so a mismatch here shows up as an off-palette
+# accent that no amount of CSS overriding fixes cleanly.
 [theme]
 base = "dark"
-primaryColor = "#2DD4BF"            # teal accent — UI chrome / selected state
-backgroundColor = "#0B0F1A"         # deep navy canvas
-secondaryBackgroundColor = "#111725" # panels / sidebar
-textColor = "#E6EAF2"
+primaryColor = "#7B61FF"            # indigo/purple accent — interaction, never data
+backgroundColor = "#0A0E1F"         # deep navy canvas
+secondaryBackgroundColor = "#111634" # panels / sidebar
+textColor = "#B9C0D9"
 font = "sans serif"
 
 [server]

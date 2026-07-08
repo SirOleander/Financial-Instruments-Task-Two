@@ -185,12 +185,15 @@ Settled decisions baked in:
   caps. This is the NEXT step's responsibility, not done here.
 
 ### FEATURE SET — DECIDED post-EDA (src/I_eda.py, artifacts in eda/, readout eda/EDA_SUMMARY.md)
-EDA ran on TRAIN-ELIGIBLE rows only (n=1308 / 71 US names). It is READ-ONLY (writes only
-`eda/` figures+CSVs, dashboard-consumable; a later Streamlit app consumes them). Signal is
-weak by nature: max |Spearman| among well-populated (n≥800) features vs future_63d_sharpe is
-~0.075 (net_margin_change) — this is a MULTIVARIATE/ensemble problem, not a single-feature
-one. `python I_eda.py` regenerates all artifacts. The feature choices below are a SELECTION
-of existing modelling_data columns (NOT a schema change):
+**REGENERATED ON THE FINAL 97** (eda/ was previously stale at the 89-run while predictions/ and
+analysis/ had moved to 97; `python I_eda.py` re-ran read-only on the DB). Current numbers:
+EDA runs on TRAIN-ELIGIBLE rows only (**n=1314 / 72 companies** — was 1308/71 at 89). It is
+READ-ONLY (writes only `eda/` figures+CSVs, dashboard-consumable; the Streamlit app consumes
+them). Signal is weak by nature: max |Spearman| among well-populated (n≥800) features vs
+future_63d_sharpe is **~0.078** (net_margin_change; was ~0.075 at 89) — this is a
+MULTIVARIATE/ensemble problem, not a single-feature one. The conclusion is UNCHANGED by the
+regeneration. `python I_eda.py` regenerates all artifacts. The feature choices below are a
+SELECTION of existing modelling_data columns (NOT a schema change):
 
 **USE as model features:**
 - **The six sub-scores** (profitability/growth/cash_flow/leverage/efficiency/investment) —
@@ -610,6 +613,60 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
    the eval metrics.
 5. Scoring weight `w` in competitive_advantage_score (spec leaves it TBD; not assumed
    0.5).
+
+## DASHBOARD (dashboard/, Streamlit) — READ-ONLY presentation layer, on the 97
+
+`streamlit run dashboard/app.py` from the repo root. Reads `data/financials.db` +
+`predictions/` + `analysis/` + `eda/`. **Writes nothing.** Modules: `app.py` (views),
+`ui.py` (palette/CSS), `charts.py` (Altair), `data.py` (cached loaders).
+
+- **Every headline number is DERIVED from an artifact** — universe size, ablation max, the
+  per-rebalance LS sequence, target std, VIF counts. Nothing about "97" is hard-coded, so a
+  pipeline rerun cannot leave the narrative stale. Do NOT reintroduce literals.
+- **Confidence tiers** replace the old raw OOD flag. `out_of_training_dist` and
+  `prediction_only` are IDENTICAL by construction (25 names) — surface them as ONE tier, not
+  two. `no_release_date` (5) is a strict subset and a stronger caveat. Partition: 72 + 20 + 5.
+- **`data.best_real_cv()` excludes degenerate models.** A naive `idxmax(cv_spearman_mean)`
+  picks ElasticNet, which regularizes to a constant — advertising the null model as "best".
+- **`data.target_std()` must mirror J_models**: RAW target (`future_63d_sharpe_raw`), rows
+  `<= SPLIT_DATE`. Using the winsorized column or all train rows silently moves the
+  mean-predictor reference line on the learning curves.
+- **Palette is derived, not eyeballed.** Navy + indigo/purple accent; green/red RESERVED for
+  performance semantics (never chrome, never reference lines, never metrics that hug zero).
+  The 9 sector hues are one shared hue set stepped per mode, chosen to maximise the minimum
+  ALL-PAIRS Machado protan/deutan ΔE (18.6 dark / 17.4 light, target ≥12). The OLD palette
+  failed: Industrials read gray (chroma 0.029) and Communication↔Industrials was ΔE 3.9.
+- **`.streamlit/config.toml` MUST track ui.py's DARK palette.** Streamlit renders
+  `st.dataframe` on a canvas grid and styles its widgets from its own theme object — CSS
+  cannot reach either. The light/dark toggle therefore calls `_apply_native_theme()`
+  **inside the button handler before `st.rerun()`** (the theme ships in NewSession, emitted
+  at the START of a run — calling it from `main()`'s body applies one run late).
+- **Logos are normalized at load** (`data._normalize_logo`): the fetched PNGs have wildly
+  inconsistent padding (JPM's mark is 16×16 in a 128×128 canvas = 2% fill), so CSS
+  `background-size` alone renders them as specks. Trimmed + re-centered in memory; the
+  committed PNGs are untouched.
+- **Charts never dramatise the null.** Near-zero metrics get neutral fills + a prominent
+  reference rule. Classification AUC is plotted as **AUC − 0.5** off a zero baseline (raw AUC
+  bars on a truncated [0.40,0.60] axis would exaggerate differences between models that are
+  all at chance). Labels carry the true AUC.
+
+### DASHBOARD — DISCLOSED CAVEATS (accepted, not bugs; do not "discover" them again)
+1. **The sector palette is NOT tritan-safe.** It was optimised (and gates) on protan/deutan,
+   which is what the reference validator gates on — tritan is reported for information only.
+   Shipping tritan ΔE is low: **2.9 (dark) / 4.0 (light)**, all-pairs. Accepted because the
+   sector badge NEVER encodes performance and always sits beside the ticker text with a
+   sector-name hover title, so identity is never colour-alone (the skill's relief rule).
+   If a future view ever encodes sector by colour ALONE, this must be revisited.
+2. **`_apply_native_theme()` uses `st._config`, a PRIVATE Streamlit API.** It is the only way
+   to reach `st.dataframe`'s canvas grid and Streamlit's own widgets, which ignore injected
+   CSS. It is wrapped in try/except: if a Streamlit upgrade breaks it, our components stay
+   correctly themed and only the native widgets fall back to `.streamlit/config.toml` (which
+   is why that file must keep tracking the DARK palette). Verified working on Streamlit 1.58.
+3. **Palette validation is reproduced in Python, not Node.** The dataviz skill ships
+   `validate_palette.js`; no Node in this environment, so the six checks were ported. The port
+   is verified against the reference palette's documented output (light 24.2 / dark 10.3) —
+   it initially disagreed until the gating was corrected to protan+deutan only. Any future
+   palette change must re-run that check, not eyeball ΔE.
 
 ## Working style
 

@@ -1,8 +1,8 @@
 # EDA & feature diagnostics — modelling_data
 
-Read-only pass over `modelling_data`. **All modelling-informing statistics (correlation, VIF, feature-target, target-by-sector) are computed on TRAIN-ELIGIBLE rows only** (train_eligible=1, n=1308 rows / 71 US companies). Distribution plots show all rows, labelled train vs prediction-only. Feature columns are the WINSORIZED (model) columns unless suffixed `[RAW]`.
+Read-only pass over `modelling_data`. **All modelling-informing statistics (correlation, VIF, feature-target, target-by-sector) are computed on TRAIN-ELIGIBLE rows only** (train_eligible=1, n=1314 rows / 72 US companies). Distribution plots show all rows, labelled train vs prediction-only. Feature columns are the WINSORIZED (model) columns unless suffixed `[RAW]`.
 
-Universe: 1662 rows / 89 companies (141 international rows held out of training, retained for prediction/ranking).
+Universe: 1712 rows / 97 companies (182 international rows held out of training, retained for prediction/ranking).
 
 ## 1. Feature-target signal (the key question: is there any?)
 
@@ -10,25 +10,25 @@ Forward-return prediction is intrinsically low-signal; weak correlations are exp
 
 | feature | n | pearson | spearman |
 |---|---|---|---|
-| net_margin_change | 1308 | +0.0589 | +0.0749 |
-| operating_margin_change | 1128 | +0.0648 | +0.0468 |
-| ROIC_change | 1044 | +0.0111 | +0.0463 |
-| return_on_assets_change | 1308 | +0.0164 | +0.0441 |
-| efficiency_score | 1308 | +0.0464 | +0.0427 |
-| net_income_growth_yoy | 1166 | +0.0341 | +0.0419 |
+| net_margin_change | 1314 | +0.0618 | +0.0784 |
+| ROIC_change | 1050 | +0.0252 | +0.0515 |
+| operating_margin_change | 1134 | +0.0671 | +0.0502 |
+| return_on_assets_change | 1314 | +0.0193 | +0.0478 |
+| net_income_growth_yoy | 1170 | +0.0352 | +0.0470 |
+| gross_margin_change | 989 | +0.0212 | +0.0436 |
 
 Strongest **negative** Spearman:
 
 | feature | n | pearson | spearman |
 |---|---|---|---|
-| operating_income_growth_yoy_change | 884 | -0.0028 | -0.0598 |
-| asset_turnover | 1308 | -0.0116 | -0.0549 |
-| return_on_assets | 1308 | -0.0218 | -0.0543 |
-| equity_ratio | 1233 | -0.0466 | -0.0538 |
-| return_on_equity | 1233 | -0.0215 | -0.0392 |
-| operative_score | 1281 | -0.0349 | -0.0359 |
+| operating_income_growth_yoy_change | 886 | -0.0021 | -0.0580 |
+| equity_ratio | 1239 | -0.0504 | -0.0568 |
+| return_on_assets | 1314 | -0.0226 | -0.0540 |
+| asset_turnover | 1314 | -0.0115 | -0.0529 |
+| gross_margin | 989 | -0.0506 | -0.0399 |
+| return_on_equity | 1239 | -0.0216 | -0.0377 |
 
-**Max |Spearman| among well-populated features = +0.0749 (net_margin_change, n=1308) — essentially no univariate signal.** This is the expected, informative result: rely on multivariate + ensemble models, not any single feature.
+**Max |Spearman| among well-populated features = +0.0784 (net_margin_change, n=1314) — essentially no univariate signal.** This is the expected, informative result: rely on multivariate + ensemble models, not any single feature.
 
 
 **CAUTION — ignore these as leaders:** the raw top-|Spearman| is dominated by sparse, sector-specific features computed on small non-representative subsamples, NOT deployable signal:
@@ -38,7 +38,7 @@ Strongest **negative** Spearman:
 | net_interest_margin | 144 | -0.1307 |
 | net_interest_margin_change | 144 | -0.1043 |
 | capital_retention | 32 | -0.0792 |
-| inventory_turnover_change | 274 | +0.0678 |
+| inventory_turnover_change | 280 | +0.0552 |
 
 ## 2. Redundancy / collinearity
 
@@ -68,27 +68,27 @@ So do NOT feed both the six sub-scores AND financial_score AND the w050 blend; a
 | core_kpis | cash_to_assets | +1.0000 | +9999.0000 |
 | core_kpis | debt_to_assets | +1.0000 | +9999.0000 |
 | core_kpis | net_debt_to_assets | +1.0000 | +9999.0000 |
-| core_kpis | operating_income_to_assets | +0.9697 | +32.9772 |
-| core_kpis | return_on_assets | +0.9674 | +30.6856 |
-| core_kpis | operating_margin | +0.9068 | +10.7302 |
-| core_kpis | net_margin | +0.9019 | +10.1978 |
+| core_kpis | operating_income_to_assets | +0.9687 | +31.9227 |
+| core_kpis | return_on_assets | +0.9673 | +30.5796 |
+| core_kpis | operating_margin | +0.9073 | +10.7851 |
+| core_kpis | net_margin | +0.9020 | +10.1998 |
 
 Feature pairs with |Pearson|>0.8: 12.
 
 | feat_a | feat_b | pearson |
 |---|---|---|
-| return_on_assets | operating_income_to_assets | +0.9634 |
+| return_on_assets | operating_income_to_assets | +0.9630 |
 | return_on_assets | net_interest_margin | +0.9087 |
-| operative_score | competitive_advantage_score_w050 | +0.9010 |
-| operating_margin | net_margin | +0.8956 |
+| operative_score | competitive_advantage_score_w050 | +0.8995 |
+| operating_margin | net_margin | +0.8954 |
+| debt_to_assets | net_debt_to_assets | +0.8867 |
 | return_on_equity | net_interest_margin | +0.8859 |
-| debt_to_assets | net_debt_to_assets | +0.8854 |
 | asset_turnover | net_interest_margin | +0.8811 |
-| leverage_score | net_debt_to_assets | -0.8634 |
-| capex_intensity | reinvestment_rate | +0.8545 |
-| investment_score | capital_retention | +0.8361 |
-| operating_cash_flow_margin | free_cash_flow_margin | +0.8182 |
-| leverage_score | debt_to_assets | -0.8177 |
+| leverage_score | net_debt_to_assets | -0.8654 |
+| capex_intensity | reinvestment_rate | +0.8542 |
+| operating_cash_flow_margin | free_cash_flow_margin | +0.8184 |
+| leverage_score | debt_to_assets | -0.8176 |
+| investment_score | capital_retention | +0.8100 |
 
 ## 3. Distributions / skew
 
@@ -96,14 +96,14 @@ Winsorization tamed the ratio-tail KPIs (see fig_dist_winsor_rawvswins.png). Fea
 
 | feature | skew | kurtosis |
 |---|---|---|
-| return_on_equity | +15.7912 | +300.8239 |
-| inventory_turnover | +5.1537 | +32.1607 |
-| net_income_growth_yoy | +4.8853 | +29.2347 |
-| net_income_growth_yoy [RAW] | +4.8853 | +29.2347 |
-| asset_turnover | +4.6241 | +32.6336 |
-| operating_income_growth_yoy [RAW] | +4.1498 | +21.6193 |
-| operating_income_growth_yoy | +4.1498 | +21.6193 |
-| operating_cash_flow_margin | -3.3773 | +45.0383 |
+| return_on_equity | +15.8268 | +302.2219 |
+| inventory_turnover | +5.2055 | +32.8442 |
+| net_income_growth_yoy | +5.0700 | +31.3024 |
+| net_income_growth_yoy [RAW] | +5.0700 | +31.3024 |
+| asset_turnover | +4.6290 | +32.7292 |
+| operating_income_growth_yoy [RAW] | +4.1123 | +21.2960 |
+| operating_income_growth_yoy | +4.1123 | +21.2960 |
+| operating_cash_flow_margin | -3.3806 | +45.2181 |
 
 ## 4. Missingness
 
@@ -111,28 +111,28 @@ Highest-missing features (all rows):
 
 | feature | pct_missing_all | pct_missing_US | pct_missing_intl |
 |---|---|---|---|
-| capital_retention_change | +98.3755 | +98.4221 | +97.8723 |
-| capital_retention | +97.5933 | +97.8961 | +94.3262 |
-| net_interest_margin_change | +89.1697 | +90.0066 | +80.1418 |
-| net_interest_margin | +87.6053 | +88.9546 | +73.0496 |
-| inventory_turnover_change | +81.6486 | +80.9993 | +88.6525 |
-| inventory_turnover | +79.4826 | +79.0270 | +84.3972 |
-| reinvestment_rate_change | +49.1576 | +48.5865 | +55.3191 |
-| r_and_d_intensity_change | +48.6763 | +48.0605 | +55.3191 |
-| reinvestment_rate | +42.6594 | +42.9980 | +39.0071 |
-| operating_income_growth_yoy_change | +42.5391 | +37.8698 | +92.9078 |
+| capital_retention_change | +98.3645 | +98.4314 | +97.8022 |
+| capital_retention | +97.5467 | +97.9085 | +94.5055 |
+| net_interest_margin_change | +89.3692 | +90.0654 | +83.5165 |
+| net_interest_margin | +87.7921 | +89.0196 | +77.4725 |
+| inventory_turnover_change | +81.6005 | +80.6536 | +89.5604 |
+| inventory_turnover | +79.0888 | +78.5621 | +83.5165 |
+| reinvestment_rate_change | +50.1752 | +48.4314 | +64.8352 |
+| r_and_d_intensity_change | +49.7079 | +47.9085 | +64.8352 |
+| operating_income_growth_yoy_change | +43.9252 | +38.0392 | +93.4066 |
+| reinvestment_rate | +43.6916 | +42.7451 | +51.6484 |
 
 Drivers: sparse sector-specific KPIs (net_interest_margin, capital_retention banks-only; inventory_turnover a few sectors; r_and_d only tech/health), negative-equity ROE/equity_ratio/ROIC (PM/MCD/BKNG/ABBV), Energy gross_margin (not emitted), operative_score (integrated/no-20-F intl), and all `*_change` features on first_obs rows. Missing is honest NULL — models must handle it (tree split-on-missing, or impute-in-pipeline; never mean-fill silently).
 
 ## 5. Target
 
-future_63d_sharpe (train, winsorized): median=+0.739, mean=+0.823, std=1.974. See target_by_sector.csv / fig_target_by_sector.png for sector dispersion — some sectors sit systematically above/below zero in-sample (a look-ahead caution: do NOT hardcode sector means into features).
+future_63d_sharpe (train, winsorized): median=+0.743, mean=+0.831, std=1.979. See target_by_sector.csv / fig_target_by_sector.png for sector dispersion — some sectors sit systematically above/below zero in-sample (a look-ahead caution: do NOT hardcode sector means into features).
 
 Lag-1 autocorrelation of a company's consecutive forward Sharpes:
 
 | frequency | n_pairs | lag1_pearson |
 |---|---|---|
-| quarterly | 950 | -0.0344 |
+| quarterly | 954 | -0.0354 |
 | annual | 216 | -0.0676 |
 
 Non-trivial serial correlation => consecutive same-company rows are NOT independent. Use a **time-based split** (already planned) and consider grouping by company to avoid train/test leakage across adjacent windows.
@@ -143,6 +143,6 @@ Non-trivial serial correlation => consecutive same-company rows are NOT independ
 
 2. **Drop within high-corr KPI pairs.** e.g. `return_on_assets` vs `operating_income_to_assets` (r=+0.96) — keep one. See high_corr_pairs.csv (candidates like return_on_assets vs operating_income_to_assets, debt_to_assets vs net_debt_to_assets, reinvestment_rate vs its components).
 
-3. **Lead features (well-populated only, n>=800):** net_margin_change, operating_margin_change, ROIC_change (positive); operating_income_growth_yoy_change, asset_turnover, return_on_assets (negative). All |Spearman|<0.08 — weak; value comes from combining them, and change features carry as much of the (thin) signal as levels. Do NOT prioritise the sparse bank-only features despite their larger raw correlations.
+3. **Lead features (well-populated only, n>=800):** net_margin_change, ROIC_change, operating_margin_change (positive); operating_income_growth_yoy_change, equity_ratio, return_on_assets (negative). All |Spearman|<0.08 — weak; value comes from combining them, and change features carry as much of the (thin) signal as levels. Do NOT prioritise the sparse bank-only features despite their larger raw correlations.
 
 4. **Split by time AND respect company grouping** (serial-correlated targets); **refit winsor caps on the training slice only** at split time (caps here were fit on the full train-eligible set for EDA); and keep missingness as NULL for a model that handles it natively.

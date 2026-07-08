@@ -1,10 +1,28 @@
 """
-ui.py — visual identity for the Signal Desk dashboard (TradingView-like, near-monochrome).
+ui.py — visual identity for the Signal Desk dashboard (deep-navy + indigo/purple accent).
 
-Chrome is strictly greyscale in BOTH light and dark themes; green/red are RESERVED for
-performance/data (up/down) and never used for chrome. One neutral selection treatment
-(elevated surface + a strong-grey left bar) — no colored accent. Sector badge dots are the
-only categorical color, and they encode data (sector), not decoration.
+Palette discipline (this is load-bearing, not taste):
+  * CHROME is navy + a single indigo/purple accent. The accent marks INTERACTION (selection,
+    active nav, focus) and doubles as the primary SERIES hue where a chart needs one
+    (the Validation line, importance bars). It never encodes performance polarity.
+  * GREEN/RED are RESERVED status colors for performance semantics (up/down, long/short)
+    and are never used for chrome, nor for reference lines, nor for metrics that merely hug
+    zero. They always ship with a sign or a text label, so identity is never colour-alone.
+  * Metrics that are indistinguishable from zero/chance get NEUTRAL fills and a prominent
+    reference rule. Dramatising noise with green/red would misrepresent the finding.
+  * SECTOR hues are the categorical palette; they encode data (sector identity), never
+    performance, and always sit beside the ticker text + a hover title (secondary encoding).
+
+The sector palette was DERIVED, not eyeballed: one shared hue set stepped into each mode's
+OKLCH lightness band, chosen to maximise the minimum ALL-PAIRS Machado-2009 protan/deutan
+CIE76 dE (sector badges appear in arbitrary juxtaposition, so the stricter all-pairs rule
+applies, not adjacent-only). Result: min dE = 18.6 (dark) / 17.4 (light), both above the
+>=12 target; every hue sits in-band, above the 0.10 chroma floor, and at >=3:1 contrast on
+its surface. The previous palette failed all three checks (Industrials read gray at C=0.029;
+Communication<->Industrials collapsed to dE=3.9 under deutan).
+
+Because ALL pairs were validated, the sector->hue assignment below is permutation-invariant:
+it is ordered for semantic sense without weakening CVD safety.
 
 Two full palettes (light/dark) are injected as literal hex per run — the theme toggle just
 flips st.session_state['mode'] and Streamlit re-runs, so no runtime CSS-variable juggling.
@@ -17,15 +35,17 @@ import streamlit as st
 
 # ------------------------------------------------------------------ palettes ---------- #
 DARK = dict(
-    bg="#131722", panel="#181c26", card="#1e222d", border="#2a2e39", border_soft="#21252f",
-    text="#c7ccd6", strong="#eceff4", muted="#868b93", faint="#565a63",
-    sel_bg="#252a36", sel_bar="#eceff4", hover="#1e222d", input_bg="#1b1f29",
+    bg="#0a0e1f", panel="#111634", card="#151a38", border="#262c4e", border_soft="#1d2342",
+    text="#b9c0d9", strong="#f2f4fa", muted="#7c86a8", faint="#5c6785",
+    sel_bg="#1e2450", sel_bar="#7b61ff", hover="#171d3d", input_bg="#121738",
+    accent="#7b61ff", accent_soft="#a78bfa", accent_dim="#2a2560",
     up="#26a69a", down="#ef5350",
 )
 LIGHT = dict(
-    bg="#ffffff", panel="#f7f8fa", card="#ffffff", border="#e0e3eb", border_soft="#eef0f4",
-    text="#3c4149", strong="#131722", muted="#787b86", faint="#b2b5be",
-    sel_bg="#eef1f6", sel_bar="#131722", hover="#f4f6f9", input_bg="#ffffff",
+    bg="#ffffff", panel="#f5f6fc", card="#ffffff", border="#e1e4f0", border_soft="#edeff7",
+    text="#3b415c", strong="#0a0e1f", muted="#6e7690", faint="#8a93b2",
+    sel_bg="#efecfd", sel_bar="#5b45e0", hover="#f4f5fb", input_bg="#ffffff",
+    accent="#5b45e0", accent_soft="#7c66ea", accent_dim="#e8e4fb",
     up="#089981", down="#f23645",
 )
 
@@ -34,18 +54,26 @@ def palette(mode: str) -> dict:
     return LIGHT if mode == "light" else DARK
 
 
-# 9 sectors -> distinct hues for the badge dot (the only categorical color; encodes data) - #
-SECTOR_COLORS = {
-    "Technology": "#2b8fb3", "Banks": "#4b7bec", "Healthcare": "#9b8cff",
-    "Consumer Discretionary": "#e0913a", "Consumer Staples": "#3aa66f",
-    "Communication": "#c85c9c", "Energy, Materials & Utilities": "#d9773a",
-    "Financial Services": "#6d7ee0", "Industrials": "#8a94a6",
+# 9 sectors -> the validated categorical hue set (see module docstring). Same hues in both
+# modes, stepped for each surface's lightness band.
+SECTOR_COLORS_DARK = {
+    "Technology": "#0074c7", "Banks": "#3b68e8", "Financial Services": "#00a5c9",
+    "Healthcare": "#00816d", "Consumer Staples": "#00834b",
+    "Consumer Discretionary": "#aa228c", "Communication": "#f1528e",
+    "Industrials": "#b67000", "Energy, Materials & Utilities": "#c81f35",
 }
-SECTOR_FALLBACK = "#8a94a6"
+SECTOR_COLORS_LIGHT = {
+    "Technology": "#0077cd", "Banks": "#4575f6", "Financial Services": "#00a2c6",
+    "Healthcare": "#008672", "Consumer Staples": "#008f52",
+    "Consumer Discretionary": "#ae2790", "Communication": "#f2538f",
+    "Industrials": "#b36e00", "Energy, Materials & Utilities": "#d12b3c",
+}
+SECTOR_FALLBACK = {"dark": "#7c86a8", "light": "#6e7690"}
 
 
-def sector_color(sector: str) -> str:
-    return SECTOR_COLORS.get(sector, SECTOR_FALLBACK)
+def sector_color(sector: str, mode: str = "dark") -> str:
+    table = SECTOR_COLORS_LIGHT if mode == "light" else SECTOR_COLORS_DARK
+    return table.get(sector, SECTOR_FALLBACK["light" if mode == "light" else "dark"])
 
 
 def safe_key(ticker: str) -> str:
@@ -61,10 +89,12 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     for t, s in zip(companies["ticker"], companies["sector"]):
         sel = f".st-key-colist .st-key-{safe_key(t)} button::before"
         if t in logo_uris:
-            rules.append(f"{sel}{{background:#fff url({logo_uris[t]}) center/74% no-repeat;"
+            # `contain` (not a %) — the URI is already trimmed + margined to a square canvas
+            # by data._normalize_logo, so contain fills the tile at the mark's true aspect.
+            rules.append(f"{sel}{{background:#fff url({logo_uris[t]}) center/contain no-repeat;"
                          f"border-color:{P['border_soft']};}}")
         else:
-            rules.append(f"{sel}{{background:{sector_color(s)};}}")
+            rules.append(f"{sel}{{background:{sector_color(s, mode)};}}")
     dot_rules = "\n".join(rules)
     st.markdown(f"""
     <style>
@@ -104,7 +134,8 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     }}
     .stTextInput input::placeholder {{ color:{P['faint']} !important; }}
     .stTextInput input:focus, [data-baseweb="select"] > div:focus-within {{
-      border-color:{P['muted']} !important; }}
+      border-color:{P['accent']} !important;
+      box-shadow:0 0 0 3px {P['accent']}26 !important; }}
     [data-baseweb="popover"], [data-baseweb="menu"], [role="listbox"] {{
       background:{P['card']} !important; border:1px solid {P['border']} !important; }}
     [role="option"] {{ color:{P['text']} !important; }}
@@ -119,9 +150,22 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     }}
     div[data-testid="stSegmentedControl"] button:hover {{ color:{P['strong']} !important;
       background:{P['hover']} !important; }}
+    /* active nav = the accent's job (interaction, never data) */
     div[data-testid="stSegmentedControl"] button[aria-checked="true"],
     div[data-testid="stSegmentedControl"] button[kind="segmented_controlActive"] {{
-      color:{P['strong']} !important; background:{P['sel_bg']} !important; font-weight:600; }}
+      color:#fff !important; background:{P['accent']} !important; font-weight:600;
+      box-shadow:0 2px 10px {P['accent']}4d; }}
+
+    /* ---------------- inner tabs (Model & EDA curation) ---------------- */
+    .stTabs [data-baseweb="tab-list"] {{ gap:2px; border-bottom:1px solid {P['border_soft']};
+      background:transparent; }}
+    .stTabs [data-baseweb="tab"] {{
+      color:{P['muted']}; font-size:.8rem; font-weight:500; letter-spacing:.02em;
+      background:transparent; border-radius:8px 8px 0 0; padding:8px 14px; }}
+    .stTabs [data-baseweb="tab"]:hover {{ color:{P['strong']}; background:{P['hover']}; }}
+    .stTabs [aria-selected="true"] {{ color:{P['accent']} !important; font-weight:650; }}
+    .stTabs [data-baseweb="tab-highlight"] {{ background:{P['accent']}; height:2px; }}
+    .stTabs [data-baseweb="tab-border"] {{ background:transparent; }}
 
     /* theme toggle button */
     .st-key-themebtn button {{
@@ -139,16 +183,18 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
     .st-key-colist::-webkit-scrollbar {{ width:7px; }}
     .st-key-colist::-webkit-scrollbar-thumb {{ background:{P['border']}; border-radius:4px; }}
 
+    /* icon tiles: 30px was too small to read a logo — 40px with a tighter crop */
     .st-key-colist [data-testid="stButton"] button {{
-      display:flex; align-items:center; gap:11px; width:100%; text-align:left; min-height:0;
+      display:flex; align-items:center; gap:12px; width:100%; text-align:left; min-height:0;
       background:transparent; border:1px solid transparent; border-left:2px solid transparent;
-      border-radius:8px; padding:7px 10px; margin:2px 0; color:{P['text']};
-      font-family:'IBM Plex Mono',monospace; font-weight:500; font-size:.86rem; letter-spacing:.02em;
-      transition:background .1s ease;
+      border-radius:9px; padding:8px 11px; margin:3px 0; color:{P['text']};
+      font-family:'IBM Plex Mono',monospace; font-weight:500; font-size:.88rem; letter-spacing:.02em;
+      transition:background .1s ease, border-color .1s ease;
     }}
     .st-key-colist [data-testid="stButton"] button::before {{
-      content:""; flex:0 0 auto; width:30px; height:30px; border-radius:7px;
-      background:{P['faint']}; border:1px solid transparent; }}
+      content:""; flex:0 0 auto; width:40px; height:40px; border-radius:9px;
+      background:{P['faint']}; border:1px solid transparent;
+      box-shadow:0 1px 3px rgba(0,0,0,.18); }}
     .st-key-colist [data-testid="stButton"] button:hover {{ background:{P['hover']}; }}
     .st-key-colist [data-testid="stButton"] button[kind="primary"] {{
       background:{P['sel_bg']}; border-left:2px solid {P['sel_bar']}; color:{P['strong']}; font-weight:600; }}
@@ -182,15 +228,25 @@ def inject_theme(companies, mode: str, logo_uris: dict[str, str] | None = None) 
       color:{P['muted']}; margin:26px 0 12px; padding-bottom:7px; border-bottom:1px solid {P['border_soft']}; }}
     .sd-note {{ color:{P['muted']}; font-size:.8rem; line-height:1.5; margin:6px 0 4px; }}
 
-    /* KPI stat tiles */
+    /* KPI stat tiles — accent hairline marks them as the headline read */
     .sd-tiles {{ display:flex; gap:12px; flex-wrap:wrap; margin:4px 0 6px; }}
     .sd-tile {{ flex:1; min-width:150px; border:1px solid {P['border']}; border-radius:11px;
-      padding:14px 16px; background:{P['card']}; }}
+      padding:14px 16px; background:{P['card']}; position:relative; overflow:hidden; }}
+    .sd-tile::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:2px;
+      background:linear-gradient(180deg,{P['accent']},{P['accent']}00); }}
     .sd-tile .v {{ font-family:'IBM Plex Mono',monospace; font-size:1.45rem; font-weight:600;
       color:{P['strong']}; line-height:1.1; }}
     .sd-tile .l {{ font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:{P['muted']};
       margin-top:6px; }}
     .sd-tile .s {{ font-size:.72rem; color:{P['faint']}; margin-top:3px; }}
+
+    /* provenance flag chips (data-quality tiers, not performance) */
+    .sd-flags {{ display:flex; gap:8px; flex-wrap:wrap; margin:2px 0 14px; }}
+    .sd-flag {{ display:inline-flex; align-items:center; gap:7px; font-size:.72rem;
+      border:1px solid {P['border']}; background:{P['card']}; border-radius:999px;
+      padding:5px 11px; color:{P['muted']}; }}
+    .sd-flag b {{ color:{P['strong']}; font-family:'IBM Plex Mono',monospace; font-weight:600; }}
+    .sd-flag .dot {{ width:8px; height:8px; border-radius:50%; flex:0 0 auto; }}
 
     /* matplotlib figures: sit on an intentional light card in either theme */
     [data-testid="stImage"] img {{ background:#fff; border:1px solid {P['border']};
@@ -204,14 +260,45 @@ def logo_html() -> str:
             '<span class="wm">SIGNAL<span class="dim">·</span>DESK</span></div>')
 
 
-def hero_badge(ticker: str, sector: str, logo_uri: str | None) -> str:
+def hero_badge(ticker: str, sector: str, logo_uri: str | None, mode: str = "dark") -> str:
     """Detail-hero badge: real logo on a white tile if available, else a sector-colored
     tile with the ticker's leading characters (graceful, never a broken image)."""
     if logo_uri:
-        return (f'<div class="tkb" style="background:#fff url({logo_uri}) center/68% no-repeat;'
-                f'border:1px solid rgba(0,0,0,.14)"></div>')
-    return (f'<div class="tkb" style="background:{sector_color(sector)}">'
+        return (f'<div class="tkb" style="background:#fff url({logo_uri}) center/contain '
+                f'no-repeat;border:1px solid rgba(0,0,0,.14)"></div>')
+    return (f'<div class="tkb" style="background:{sector_color(sector, mode)}">'
             f'{ticker.split(".")[0][:4]}</div>')
+
+
+# confidence tiers -> (color-role, meaning). Order is the tier order, best first.
+CONFIDENCE_TIERS = [
+    ("Train-eligible", "accent",
+     "US/GOOGL/GEV names with enough history to train on; the model learned from these."),
+    ("Prediction-only", "muted",
+     "Held OUT of training (thin, structurally annual history) — scored and ranked, but the "
+     "model never saw them. Lower confidence."),
+    ("No release date", "down",
+     "yfinance exposes no usable report-release date, so no look-ahead-safe target could ever "
+     "be built. Ranked on features alone — lowest confidence."),
+]
+
+
+def flag_legend(mode: str, counts: dict) -> None:
+    """Chips explaining the provenance tiers, with derived counts.
+
+    These are DATA-QUALITY tiers, never performance — so they get the chrome/status roles,
+    and each chip carries a text label (identity is never colour-alone)."""
+    P = palette(mode)
+    key = {"Train-eligible": counts["train_eligible"],
+           "Prediction-only": counts["prediction_only"] - counts["no_release_date"],
+           "No release date": counts["no_release_date"]}
+    chips = "".join(
+        f'<span class="sd-flag" title="{desc}"><span class="dot" '
+        f'style="background:{P[role]}"></span>{name} <b>{key[name]}</b></span>'
+        for name, role, desc in CONFIDENCE_TIERS)
+    st.markdown(f'<div class="sd-flags">{chips}'
+                f'<span class="sd-flag"><span class="dot" style="background:{P["faint"]}">'
+                f'</span>Universe <b>{counts["n"]}</b></span></div>', unsafe_allow_html=True)
 
 
 def coming_soon(stage: str, title: str, body: str) -> None:

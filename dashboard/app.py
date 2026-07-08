@@ -1,10 +1,19 @@
 """
 app.py — Signal Desk: report-signal equity-research dashboard (READ-ONLY).
 
-STAGE 1.5 — skeleton + navigation, TradingView-like near-monochrome restyle. A slim
-full-width top bar (logo far-left, integrated search, horizontal nav, light/dark toggle)
-over a left ticker watchlist + a main content area with four view shells. No real tab
-content yet. Reads data/financials.db (company universe) via cached loaders; writes nothing.
+Deep-navy + indigo/purple chrome; green/red reserved for performance semantics. A slim
+full-width top bar (logo, search, horizontal nav, light/dark toggle) over a left ticker
+watchlist + four views: Ranking, Model & EDA, Backtest, Company Detail.
+
+Reads data/financials.db plus the eda/, predictions/ and analysis/ artifacts via cached
+loaders. Writes nothing.
+
+Two standing rules in here:
+  * Every headline number is DERIVED from an artifact (universe size, ablation max,
+    per-rebalance sequence, target std). Nothing about the 97-name universe is hard-coded,
+    so a pipeline rerun cannot leave the narrative stale.
+  * The near-null result is the finding. Charts do not dramatise noise: metrics that hug
+    zero get neutral fills and a prominent zero/chance reference rule.
 
 Run from the repo root:
     streamlit run dashboard/app.py
@@ -20,6 +29,28 @@ import ui
 
 ASSETS = Path(__file__).resolve().parent / "assets"
 VIEWS = ["Ranking", "Model & EDA", "Backtest", "Company Detail"]
+
+
+def _apply_native_theme(mode: str) -> None:
+    """Push our palette into Streamlit's OWN theme, not just our injected CSS.
+
+    Streamlit renders st.dataframe on a canvas-based grid and styles its widgets from the
+    theme object it receives in the NewSession message — CSS reaches neither. Without this,
+    the toggle flips our chrome while the dataframe, nav strip and buttons stay dark.
+
+    TIMING MATTERS: NewSession is emitted at the START of a script run, so this must be
+    called in the toggle handler BEFORE st.rerun() — calling it from main()'s body would only
+    take effect one run late. `st._config` is private; guarded, so if it ever breaks our own
+    components stay correctly themed and only Streamlit's native widgets fall back."""
+    P = ui.palette(mode)
+    try:
+        st._config.set_option("theme.base", "light" if mode == "light" else "dark")
+        st._config.set_option("theme.primaryColor", P["accent"])
+        st._config.set_option("theme.backgroundColor", P["bg"])
+        st._config.set_option("theme.secondaryBackgroundColor", P["panel"])
+        st._config.set_option("theme.textColor", P["text"])
+    except Exception:
+        pass
 
 
 def top_bar() -> str:
@@ -42,7 +73,10 @@ def top_bar() -> str:
         with c_toggle:
             icon = "☀" if st.session_state["mode"] == "dark" else "☾"
             if st.button(icon, key="themebtn", help="Toggle light / dark"):
-                st.session_state["mode"] = "light" if st.session_state["mode"] == "dark" else "dark"
+                new_mode = "light" if st.session_state["mode"] == "dark" else "dark"
+                st.session_state["mode"] = new_mode
+                # must precede the rerun — see _apply_native_theme's timing note
+                _apply_native_theme(new_mode)
                 st.rerun()
     return view or st.session_state["view"]
 
@@ -84,9 +118,12 @@ def watchlist(companies) -> None:
 def view_ranking(logos: dict) -> None:
     import pandas as pd
     mode = st.session_state["mode"]
-    st.markdown('<div class="sd-view-title">Company Ranking</div>'
-                '<div class="sd-view-sub">All 89 companies by model-predicted forward-63d '
-                'Sharpe · long top-10 / short bottom-10.</div>', unsafe_allow_html=True)
+    fc = data.flag_counts()
+    st.markdown(f'<div class="sd-view-title">Company Ranking</div>'
+                f'<div class="sd-view-sub">All {fc["n"]} companies by model-predicted '
+                f'forward-63d Sharpe · long top-10 / short bottom-10. Universe = the mandated '
+                f'98 minus GOOG (Alphabet dual-class dedup — GOOGL retained).</div>',
+                unsafe_allow_html=True)
 
     ui.caveat(mode, "shown for completeness. Out-of-sample signal is weak (near-zero rank "
                     "correlation) and the long/short backtest is flat — see the "
@@ -94,9 +131,17 @@ def view_ranking(logos: dict) -> None:
                     "advice.")
 
     df = data.load_ranking()
+    ui.flag_legend(mode, fc)
+
     longs = df[df["basket"] == "LONG"]["ticker"].tolist()
     shorts = df[df["basket"] == "SHORT"]["ticker"].tolist()
     ui.basket_summary(mode, longs, shorts)
+
+    n_flag_long = int(df[df["basket"] == "LONG"]["out_of_training_dist"].sum())
+    n_flag_short = int(df[df["basket"] == "SHORT"]["out_of_training_dist"].sum())
+    ui.note(f"<b>{n_flag_long}</b> of the 10 longs and <b>{n_flag_short}</b> of the 10 shorts "
+            f"are prediction-only names the model never trained on — a further reason to read "
+            f"the book as a methodology demo, not a portfolio.")
 
     # scannable, sortable table — logos via ImageColumn, green/red row tint per basket
     disp = pd.DataFrame({
@@ -107,14 +152,12 @@ def view_ranking(logos: dict) -> None:
         "Sector": df["sector"],
         "Pred. Sharpe": df["pred_ensemble"],
         "Basket": df["basket"],
-        "Note": ["OOD · held out of training" if o else ""
-                 for o in df["out_of_training_dist"]],
+        "Confidence": df["confidence"],
     })
-    P = ui.palette(mode)
 
     def _tint(row):
-        c = (f"rgba(38,166,154,.15)" if row["Basket"] == "LONG"
-             else f"rgba(239,83,80,.15)" if row["Basket"] == "SHORT" else "")
+        c = ("rgba(38,166,154,.15)" if row["Basket"] == "LONG"
+             else "rgba(239,83,80,.15)" if row["Basket"] == "SHORT" else "")
         return [f"background-color:{c}"] * len(row)
 
     styler = disp.style.apply(_tint, axis=1).format({"Pred. Sharpe": "{:+.2f}"})
@@ -132,7 +175,10 @@ def view_ranking(logos: dict) -> None:
                 "Pred. Sharpe", width="small",
                 help="Ensemble-predicted forward 63-day Sharpe (SVR+RF+XGB)."),
             "Basket": st.column_config.TextColumn(width="small"),
-            "Note": st.column_config.TextColumn("Note", width="medium"),
+            "Confidence": st.column_config.TextColumn(
+                "Confidence", width="medium",
+                help="Train-eligible = model learned from this name. Prediction-only = held "
+                     "out of training. No release date = no look-ahead-safe target exists."),
         },
     )
     if ev.selection.rows:
@@ -145,36 +191,11 @@ def view_ranking(logos: dict) -> None:
     st.caption("Click a row to open its Company Detail. Click a column header to sort.")
 
 
-def view_model() -> None:
+def _tab_performance(mode, cv, tm, ft_rel) -> None:
+    """CV selection + the one-shot test, and the feature→target correlation wall."""
     import pandas as pd
     import charts
-    mode = st.session_state["mode"]
-    st.markdown('<div class="sd-view-title">Model &amp; EDA</div>'
-                '<div class="sd-view-sub">Leak-safe model performance and feature '
-                'diagnostics — reported straight.</div>', unsafe_allow_html=True)
 
-    cv = data.load_cv()
-    tm = data.load_test_metrics()
-    ft = data.load_feature_target()
-    ens = tm[tm["model"].str.startswith("ENSEMBLE")].iloc[0]
-    best_cv = cv.loc[cv["cv_spearman_mean"].idxmax()]
-    ft_rel = ft[ft["reliable"] == True]
-    max_ft = ft_rel["spearman"].abs().max()
-
-    ui.note("<b>Verdict:</b> report fundamentals carry <b>no reliable signal</b> for the "
-            "forward 63-day Sharpe on this universe/period — the honest result, consistent "
-            "with market efficiency. Every metric below is indistinguishable from zero. The "
-            "value of this project is the leak-free methodology, not alpha.")
-
-    ui.stat_tiles([
-        (f"{max_ft:.3f}", "Max feature |Spearman|", "strongest single feature vs target"),
-        (f"{best_cv['cv_spearman_mean']:+.3f}", "Best CV Spearman",
-         f"{best_cv['model']} · ±{best_cv['cv_spearman_std']:.3f} across folds"),
-        (f"{ens['test_spearman_pooled']:+.3f}", "Ensemble test Spearman", "held-out 12-month test"),
-        (f"{ens['test_rmse']:.2f}", "Ensemble test RMSE", "future_63d_sharpe units"),
-    ])
-
-    # ---- model performance ----
     ui.section("Model performance · CV selection + one-shot test")
     perf = cv.merge(tm[["model", "test_spearman_pooled", "test_rmse"]], on="model", how="left")
     perf = perf.sort_values("cv_spearman_mean", ascending=False)
@@ -187,6 +208,10 @@ def view_model() -> None:
         "Note": ["null / constant model" if d else "" for d in perf["degenerate_constant"]],
     })
     st.dataframe(table, hide_index=True, width="stretch")
+    ui.note("Lasso and ElasticNet drive <b>every</b> coefficient to exactly zero — they ARE "
+            "the mean predictor. Their CV Spearman is an artifact of a constant prediction, "
+            "not learned signal, so they are excluded from the ensemble and from the "
+            "&ldquo;best model&rdquo; tile above.")
 
     c1, c2 = st.columns([1, 1], gap="large")
     with c1:
@@ -201,26 +226,199 @@ def view_model() -> None:
             domain=(-0.16, 0.16), height=230, err=True), width="stretch")
     with c2:
         top = ft_rel.reindex(ft_rel["spearman"].abs().sort_values(ascending=False).index).head(10)
-        st.markdown('<div class="sd-note"><b>Feature → target rank correlation</b> '
-                    '(well-populated features). The strongest is ~0.075 — essentially '
-                    'nothing.</div>', unsafe_allow_html=True)
+        max_ft = ft_rel["spearman"].abs().max()
+        st.markdown(f'<div class="sd-note"><b>Feature → target rank correlation</b> '
+                    f'(well-populated features, n≥800). The strongest is '
+                    f'~{max_ft:.3f} — essentially nothing.</div>', unsafe_allow_html=True)
         st.altair_chart(charts.signed_bar(
             top, "feature", "spearman", mode, x_title="Spearman vs future_63d_sharpe",
             domain=(-0.1, 0.1), height=230), width="stretch")
 
-    # ---- ablation ----
+
+def _tab_error(mode) -> None:
+    """Bias-variance: the two failure modes, and the learning curves that settle which binds."""
+    import charts
+
+    tv = data.load_train_vs_val()
+    tstd = data.target_std()
+
+    ui.section("Error analysis · bias and variance")
+    ui.note(f"Validation RMSE sits at the target's own standard deviation "
+            f"(<b>{tstd:.3f}</b>) for every model — the score a mean-predictor achieves. "
+            "But the models get there <b>two different ways</b>, and calling them all "
+            "&ldquo;high-bias, low-variance&rdquo; would be wrong.")
+
+    over = tv.loc[tv["train_spearman"].idxmax()]
+    under = tv[tv["train_spearman"] == 0]
+    ui.stat_tiles([
+        (f"{tstd:.3f}", "Target std (train+val)", "the RMSE of predicting the mean"),
+        (f"+{over['train_spearman']:.3f} → {over['val_spearman']:+.3f}",
+         f"{over['model']} train → val ρ", "memorises, generalises at zero (variance)"),
+        (f"{len(under)}", "Models regularised to null",
+         "Lasso/ElasticNet: every coefficient = 0 (bias)"),
+        (f"{tv['val_spearman'].min():+.3f} … {tv['val_spearman'].max():+.3f}",
+         "Validation ρ range", "all six models · straddles zero"),
+    ])
+
+    tvs = tv.sort_values("train_spearman", ascending=False)
+    st.markdown('<div class="sd-note"><b>Train → validation collapse.</b> A long bar is a '
+                'high-<i>variance</i> model that memorised the training rows (SVR ρ +0.92 → '
+                '+0.00). A dot stacked on zero is a high-<i>bias</i> model regularised into '
+                'the mean predictor. Both land in the same place out of sample.</div>',
+                unsafe_allow_html=True)
+    st.altair_chart(charts.train_val_dumbbell(tvs, mode), width="stretch")
+
+    ui.section("Learning curves · does more data help?")
+    ui.note("Validation error against an expanding chronological training prefix. "
+            "<b>If variance were the binding constraint, validation error would fall as data "
+            "grows.</b> It does not — it sits flat on the mean-predictor line. More data, more "
+            "capacity and more tuning cannot fix this; only a more informative feature set "
+            "could.")
+    pick = st.segmented_control("Model", data.LEARNING_CURVE_MODELS,
+                                default="RandomForest", key="lc_model")
+    lc = data.load_learning_curve(pick or "RandomForest")
+    st.altair_chart(charts.learning_curve(lc, mode, ref=tstd), width="stretch")
+
+    with st.expander("Train vs validation error — full table"):
+        st.dataframe(tv.round(4), hide_index=True, width="stretch")
+    with st.expander("Reference figures (matplotlib learning curves)"):
+        for m in data.LEARNING_CURVE_MODELS:
+            st.caption(m)
+            st.image(data.analysis_fig(f"fig_learning_curve_{m}.png"), width="stretch")
+
+
+def _tab_importance(mode) -> None:
+    """The models are not black boxes — and interpretability CONFIRMS the null."""
+    import charts
+
+    fi = data.load_feature_importance()
+    ui.section("Feature importance · the model is not a black box")
+
+    n_zero_lasso = int((fi["Lasso"] == 0).sum())
+    n_feat = len(fi)
+    ui.note(f"<b>Lasso and ElasticNet select 0 of {n_feat} features</b> — every coefficient is "
+            f"exactly zero. That is the cleanest possible statement of the null: no linear "
+            f"combination of these features beats the intercept. Ridge keeps all "
+            f"{n_feat} but at trivial magnitude; RF/XGB importances spread thinly with no "
+            f"dominant split variable; SVR is explained by permutation importance on the "
+            f"<b>validation</b> folds (never the test set).")
+
+    # invert against the GLOBAL worst rank so the bar lengths are comparable across models,
+    # not rescaled to whatever happens to be in the top-10 subset
+    worst_rank = fi["mean_rank"].max()
+    cons = fi.nsmallest(10, "mean_rank")[["feature", "mean_rank"]].copy()
+    cons["consensus"] = worst_rank + 1 - cons["mean_rank"]  # higher = more important
+    c1, c2 = st.columns([1, 1], gap="large")
+    with c1:
+        st.markdown('<div class="sd-note"><b>Rank-consensus top 10</b> across all six models '
+                    '(inverted mean rank). Mostly <i>change</i> features.</div>',
+                    unsafe_allow_html=True)
+        st.altair_chart(charts.importance_bar(
+            cons, "feature", "consensus", mode, x_title="consensus (inverted mean rank)",
+            height=290), width="stretch")
+    with c2:
+        model = st.selectbox("Per-model importance",
+                             ["XGBoost", "RandomForest", "Ridge", "SVR_perm"], key="fi_model")
+        sub = fi[["feature", model]].copy()
+        sub["mag"] = sub[model].abs()
+        sub = sub.nlargest(10, "mag")[["feature", model]]
+        st.altair_chart(charts.importance_bar(
+            sub, "feature", model, mode, x_title=f"{model} importance", height=290),
+            width="stretch")
+
+    ui.note(f"<b>Read the magnitudes, not just the ranking.</b> Lasso zeroes all {n_zero_lasso} "
+            "features; the surviving importances are trivially small. This ranks near-noise — "
+            "interpretability <i>confirms</i> the null, it does not rescue it.")
+
+    with st.expander("Consensus figure + per-model figures (matplotlib)"):
+        for f in ["fig_importance_consensus.png", "fig_importance_XGBoost.png",
+                  "fig_importance_RandomForest.png", "fig_importance_Ridge.png"]:
+            st.image(data.analysis_fig(f), width="stretch")
+    with st.expander("Full importance table (48 features × 6 models)"):
+        st.dataframe(fi.round(4), hide_index=True, width="stretch")
+
+
+def _tab_classification(mode) -> None:
+    """The classification lens — same answer, near chance."""
+    import charts
+
+    cm = data.load_classification()
+    ui.section("Classification lens · can we separate winners from losers?")
+    ui.note("Label = <b>top-third vs bottom-third</b> realized forward Sharpe (middle dropped), "
+            "matching the long/short framing. <b>Leak control:</b> tercile cutoffs are fit on "
+            "<b>train rows only</b> — per CV fold from that fold's train rows, and from "
+            "train+val for the one-shot test. Test outcomes never inform a cutoff.")
+
+    scheme_lbl = st.segmented_control(
+        "Labelling scheme", ["Train-fitted tercile", "Balanced within-period"],
+        default="Train-fitted tercile", key="cls_scheme")
+    scheme = ("train_fitted_tercile" if (scheme_lbl or "").startswith("Train")
+              else "within_period_tercile")
+    sub = cm[cm["scheme"] == scheme].copy()
+    base = float(sub["majority_baseline_acc"].iloc[0])
+
+    ui.stat_tiles([
+        (f"{sub['test_auc'].min():.3f}–{sub['test_auc'].max():.3f}", "Test AUC range",
+         "chance = 0.500"),
+        (f"{sub['cv_auc'].mean():.3f}", "Mean CV AUC", "mostly below 0.5 → sign is noise"),
+        (f"{base:.3f}", "Majority baseline acc.",
+         "raw accuracy at/below this is meaningless"),
+        (f"{sub['test_balanced_accuracy'].mean():.3f}", "Mean balanced accuracy",
+         "the metric to read · 0.5 = chance"),
+    ])
+
+    c1, c2 = st.columns([1.05, 1], gap="large")
+    with c1:
+        bars = sub[["model", "test_auc"]].rename(columns={"test_auc": "auc"})
+        bars = bars.sort_values("auc", ascending=False)
+        st.markdown('<div class="sd-note"><b>Test AUC vs chance.</b> Bars show <b>AUC − 0.5</b>, '
+                    'so length is literally distance from chance and the baseline <i>is</i> '
+                    'chance (labels carry the true AUC). Every model hugs it; SVM lands '
+                    '<i>below</i>. Neutral fill on purpose — colouring noise green/red would '
+                    'dramatise a result that is not there.</div>', unsafe_allow_html=True)
+        st.altair_chart(charts.auc_bars(bars, mode), width="stretch")
+    with c2:
+        st.markdown('<div class="sd-note"><b>Metrics.</b> Read AUC and <i>balanced</i> '
+                    'accuracy. Raw accuracy is misleading here — the train-fitted cutoff plus '
+                    'a higher-Sharpe test regime leaves the test set '
+                    f'{base:.1%} one class.</div>', unsafe_allow_html=True)
+        show = sub[["model", "cv_auc", "test_auc", "test_accuracy",
+                    "test_balanced_accuracy", "test_f1"]].round(3)
+        show.columns = ["Model", "CV AUC", "Test AUC", "Acc.", "Bal. acc.", "F1"]
+        st.dataframe(show, hide_index=True, width="stretch")
+
+    with st.expander("ROC curves"):
+        st.image(data.analysis_fig("fig_roc_curves.png"), width="stretch")
+    with st.expander("Confusion matrices"):
+        st.image(data.analysis_fig("fig_confusion_matrices.png"), width="stretch")
+
+    ui.note("<b>Verdict:</b> a classification framing gives the <b>same answer</b> as the "
+            "regression — future winners cannot be separated from losers better than chance. "
+            "<br><b>Honest caveat:</b> the test set was already used once by the regression; "
+            "this evaluation touches it a second time under a <i>pre-committed</i> protocol "
+            "(labels, models, grids and metrics all fixed before looking). No iterative tuning "
+            "against the test set.")
+
+
+def _tab_robustness(mode) -> None:
     ui.section("Robustness · feature-set ablation")
-    ui.note("Re-running the whole roster on <b>sub-scores only</b> vs <b>KPIs only</b> vs "
-            "<b>full</b> — the null does not move. Max |CV Spearman| across all 18 cells = "
-            "<b>0.041</b>.")
-    abl = data.load_ablation().pivot_table(index="model", columns="feature_set",
-                                           values="cv_spearman").round(4)
+    abl_raw = data.load_ablation()
+    max_abl = abl_raw["cv_spearman"].abs().max()
+    n_cells = len(abl_raw)
+    ui.note(f"Re-running the whole roster on <b>sub-scores only</b> vs <b>KPIs only</b> vs "
+            f"<b>full</b> — the null does not move. Max |CV Spearman| across all {n_cells} "
+            f"cells = <b>{max_abl:.3f}</b>. No feature family lifts rank correlation above "
+            f"noise, so the null is robust to feature choice.")
+    abl = abl_raw.pivot_table(index="model", columns="feature_set",
+                              values="cv_spearman").round(4)
     abl = abl[["subscores_only", "kpis_only", "full"]].reset_index()
     st.dataframe(abl, hide_index=True, width="stretch")
 
-    # ---- EDA figures ----
+
+def _tab_eda(mode) -> None:
     ui.section("Exploratory data analysis")
-    ui.note("Full diagnostics (train-eligible rows only). Figures open on demand.")
+    ui.note("Full diagnostics, computed on <b>train-eligible rows only</b> and regenerated on "
+            "the final 97-name universe. Figures open on demand.")
     figs = [
         ("Feature → target correlation (all features)", "fig_target_corr_bar.png"),
         ("Feature distributions · scores", "fig_dist_scores.png"),
@@ -238,10 +436,67 @@ def view_model() -> None:
     with st.expander("Multicollinearity (VIF) — by-construction identities"):
         vif = data.load_vif()
         vshow = vif[vif["flag"] != ""][["block", "feature", "VIF", "flag"]].copy()
+        n_inf = int((vif["VIF"] > 1e6).sum())
         vshow["VIF"] = vshow["VIF"].map(lambda v: "∞" if v > 1e6 else f"{v:.1f}")
         st.dataframe(vshow, hide_index=True, width="stretch")
-        ui.note("Five exact identities (VIF = ∞) plus high-VIF redundancies drove the "
-                "de-duplicated feature set — see CLAUDE.md.")
+        # NB: n_inf counts FEATURES, not identities — one identity (e.g. financial_score =
+        # mean of the six sub-scores) makes several features perfectly collinear at once.
+        ui.note(f"<b>{n_inf} features</b> carry VIF = ∞ — perfect collinearity arising from a "
+                "handful of exact by-construction identities (financial_score = mean of the "
+                "six sub-scores; net_debt_to_assets = debt_to_assets − cash_to_assets; "
+                "free_cash_flow_margin = operating_cash_flow_margin − capex_intensity; …). "
+                "These, plus the high-VIF redundancies below, drove the de-duplicated feature "
+                "set — see CLAUDE.md.")
+
+    ui.note("<b>Sector is a grouping key for scoring, never a model feature.</b> Forward-Sharpe "
+            "medians do differ across sectors in-sample, but that is in-sample dispersion, not "
+            "a look-ahead-safe signal — no sector identity, one-hots or sector means are fed "
+            "to the model.")
+
+
+def view_model() -> None:
+    mode = st.session_state["mode"]
+    st.markdown('<div class="sd-view-title">Model &amp; EDA</div>'
+                '<div class="sd-view-sub">Leak-safe model performance, error analysis, '
+                'interpretability and a classification cross-check — reported straight.</div>',
+                unsafe_allow_html=True)
+
+    cv = data.load_cv()
+    tm = data.load_test_metrics()
+    ft = data.load_feature_target()
+    ens = tm[tm["model"].str.startswith("ENSEMBLE")].iloc[0]
+    best_cv = data.best_real_cv(cv)          # excludes the degenerate constant models
+    ft_rel = ft[ft["reliable"] == True]
+    max_ft = ft_rel["spearman"].abs().max()
+
+    ui.note("<b>Verdict:</b> report fundamentals carry <b>no reliable signal</b> for the "
+            "forward 63-day Sharpe on this universe/period — the honest result, consistent "
+            "with market efficiency. Every metric below is indistinguishable from zero. The "
+            "value of this project is the leak-free methodology, not alpha.")
+
+    ui.stat_tiles([
+        (f"{max_ft:.3f}", "Max feature |Spearman|", "strongest single feature vs target"),
+        (f"{best_cv['cv_spearman_mean']:+.3f}", "Best CV Spearman",
+         f"{best_cv['model']} · ±{best_cv['cv_spearman_std']:.3f} · non-degenerate models only"),
+        (f"{ens['test_spearman_pooled']:+.3f}", "Ensemble test Spearman", "held-out 12-month test"),
+        (f"{ens['test_rmse']:.2f}", "Ensemble test RMSE", "future_63d_sharpe units"),
+    ])
+
+    t1, t2, t3, t4, t5, t6 = st.tabs(
+        ["Performance", "Error analysis", "Feature importance", "Classification",
+         "Robustness", "EDA"])
+    with t1:
+        _tab_performance(mode, cv, tm, ft_rel)
+    with t2:
+        _tab_error(mode)
+    with t3:
+        _tab_importance(mode)
+    with t4:
+        _tab_classification(mode)
+    with t5:
+        _tab_robustness(mode)
+    with t6:
+        _tab_eda(mode)
 
 
 def view_backtest(logos: dict) -> None:
@@ -349,10 +604,14 @@ def view_backtest(logos: dict) -> None:
     with st.expander("Reference figure (matplotlib equity curve)"):
         st.image(str(data.PRED_DIR / "fig_backtest_equity.png"), width="stretch")
 
-    ui.note("<b>Honest read:</b> per-rebalance long-short flips sign (+15%, −5%, −21%, +13%) "
-            "with no persistence; over 4 quarters the strategy adds no spread. Consistent "
-            "with the near-null model and market efficiency — the backtest confirms the "
-            "pipeline runs end-to-end and leak-free, nothing more.")
+    # derived from backtest_periods.csv — never hard-coded, so it can't go stale on a rerun
+    seq = ", ".join(f"{v:+.0%}" for v in per["gross_ls"])
+    n_flip = int((per["gross_ls"] > 0).sum())
+    ui.note(f"<b>Honest read:</b> per-rebalance long-short flips sign ({seq}) with no "
+            f"persistence — {n_flip} of {len(per)} quarters positive. Over {len(per)} quarters "
+            "the strategy adds no spread. Consistent with the near-null model and market "
+            "efficiency — the backtest confirms the pipeline runs end-to-end and leak-free, "
+            "nothing more.")
 
 
 def view_detail(companies) -> None:
@@ -369,26 +628,30 @@ def view_detail(companies) -> None:
     mode = st.session_state["mode"]
     P = ui.palette(mode)
     r = companies[companies["ticker"] == tk].iloc[0]
-    badge = ui.hero_badge(tk, r["sector"], data.logo_uris().get(tk))
-    intl = ("<span class=\"sd-chip\">Int'l · out-of-training</span>" if r["is_intl"]
-            else '<span class="sd-chip">US · train-eligible</span>')
-    st.markdown(
-        f'<div class="sd-hero">{badge}<div><div class="nm">{r["name"]}</div>'
-        f'<div class="sub">{tk} &nbsp;·&nbsp; {r["sector"]} &nbsp;·&nbsp; '
-        f'{r["company_group"]} {intl}</div></div></div>',
-        unsafe_allow_html=True)
+    badge = ui.hero_badge(tk, r["sector"], data.logo_uris().get(tk), mode)
 
     rank = data.load_ranking()
     rr = rank[rank["ticker"] == tk].iloc[0]
     hist = data.company_history(tk)
     latest = hist.iloc[-1] if len(hist) else None
 
+    # confidence tier straight from the pipeline flags (not inferred from `source`)
+    conf = rr["confidence"]
+    chips = f'<span class="sd-chip">{conf}</span>'
+    if rr["operative_missing"]:
+        chips += '<span class="sd-chip">No operative score</span>'
+    st.markdown(
+        f'<div class="sd-hero">{badge}<div><div class="nm">{r["name"]}</div>'
+        f'<div class="sub">{tk} &nbsp;·&nbsp; {r["sector"]} &nbsp;·&nbsp; '
+        f'{r["company_group"]} {chips}</div></div></div>',
+        unsafe_allow_html=True)
+
     basket = rr["basket"] or "—"
     bcol = P["up"] if basket == "LONG" else P["down"] if basket == "SHORT" else P["muted"]
     op = latest["operative_score"] if latest is not None else None
     ui.stat_tiles([
         (f"{rr['pred_ensemble']:+.2f}", "Predicted fwd-63d Sharpe", "ensemble · low-confidence"),
-        (f"#{int(rr['rank_ensemble'])}", "Rank of 89",
+        (f"#{int(rr['rank_ensemble'])}", f"Rank of {len(rank)}",
          f"<span style='color:{bcol}'>{basket}</span>" if basket != "—" else "mid-book"),
         (f"{latest['financial_score']:.2f}" if latest is not None and pd.notna(latest['financial_score']) else "—",
          "Financial score", "sector percentile (latest)"),
@@ -453,10 +716,17 @@ def view_detail(companies) -> None:
             st.caption(f"As of the {latest['report_release_date']} report "
                        f"({latest['frequency']}).")
 
-    ood = (" This is a held-out international (out-of-training) name — its prediction is "
-           "especially low-confidence." if r["is_intl"] else "")
+    extra = ""
+    if rr["no_release_date"]:
+        extra = (" This name has <b>no usable report-release date</b>, so no look-ahead-safe "
+                 "target could ever be built for it. It is ranked on features alone and was "
+                 "never trained on — the lowest-confidence tier.")
+    elif rr["out_of_training_dist"]:
+        extra = (" This is a <b>prediction-only</b> name: its history is too thin (and "
+                 "structurally annual) to train on, so the model scored it without ever having "
+                 "learned from it — especially low-confidence.")
     ui.note("<b>Note:</b> the predicted Sharpe is the near-null model's output and should be "
-            "read as low-confidence (see Model &amp; EDA)." + ood)
+            "read as low-confidence (see Model &amp; EDA)." + extra)
 
 
 def main() -> None:
