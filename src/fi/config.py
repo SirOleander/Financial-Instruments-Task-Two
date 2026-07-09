@@ -515,26 +515,6 @@ COMPANY_GROUPS = {
     ),
 }
 
-DECUMULATE_YTD_TICKERS = frozenset({
-    "AXP", 
-    "BAC",
-    "BLK",
-    "BRK-B",
-    "C",
-    "CVX", 
-    "GS", 
-    "JPM",
-    "LIN",
-    "MA", 
-    "MS",
-    "NEE", 
-    "SCHW",
-    "SPGI",
-    "V", 
-    "WFC",
-    "XOM",
-})
-
 def _build_company_group_index() -> tuple[dict[str, str], dict[str, list[str]]]:
     group_by_ticker: dict[str, str] = {}
     duplicate_groups: dict[str, list[str]] = {}

@@ -451,7 +451,8 @@ Load-bearing details that survive the move:
   `FISCAL_YEARS_TO_FETCH = 6` (the value the DB was built on; earlier "7" was a doc error),
   `validate_config()`, `DATABASE_PATH = BASE_DIR/data/financials.db`. The us-gaap concept maps
   (`FINANCIAL_ITEMS_BY_GROUP`, `INLINE_FINANCIAL_ITEMS_BY_TICKER`, `CALCULATED_*`) live in
-  `fi.concepts` and are re-exported. `DECUMULATE_YTD_TICKERS` is **dead/unused**.
+  `fi.concepts` and are re-exported. (`DECUMULATE_YTD_TICKERS` was dead — defined, never read
+  — and has been **removed**; de-cumulation runs for every ticker, gated by duration.)
 - **`fi.db`** — one `financial_facts` table, long format (one row per ticker/filing/position).
   `get_connection()` uses `sqlite3.Row`. Unique index = (ticker, accession_number, position,
   extraction_method). Missing values are stored as `0`, but `selection_status == 'missing'` is

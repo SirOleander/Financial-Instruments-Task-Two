@@ -1178,14 +1178,14 @@ def _fye_month_from_facts(df: pd.DataFrame) -> int:
 
 
 def decumulate_ytd_flows(rows: pd.DataFrame, ticker: str) -> pd.DataFrame:
-    """Convert YTD 10-Q flow values to discrete quarters for gated tickers.
+    """Convert YTD 10-Q flow values to discrete quarters.
 
-    Runs only for tickers in config.DECUMULATE_YTD_TICKERS. Within those,
-    detection is by duration (> QUARTER_MAX_DAYS), so only genuinely cumulative
-    rows are changed; discrete rows and all non-10-Q rows are left untouched.
-    Because the filter is by statement_type (income + cash flow) and duration,
-    it covers any cumulative flow position - operating_cash_flow AND
-    capital_expenditure alike - without a hard-coded position list.
+    Runs for EVERY ticker; DURATION does the gating (not a ticker list). Detection is by
+    duration (> QUARTER_MAX_DAYS), so only genuinely cumulative rows are changed; discrete
+    rows and all non-10-Q rows are left untouched. Because the filter is by statement_type
+    (income + cash flow) and duration, it covers any cumulative flow position -
+    operating_cash_flow AND capital_expenditure alike - without a hard-coded position list.
+    (There is no DECUMULATE_YTD_TICKERS gate — that constant was dead and has been removed.)
 
     Fiscal year and fiscal quarter are derived FYE-aware (from the ticker's own
     10-K period-end month), so this is correct for non-calendar filers like V.
