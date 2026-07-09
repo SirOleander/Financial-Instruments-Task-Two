@@ -211,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _default_baseline() -> Path | None:
-    p = config.BASE_DIR / "proofs" / "baseline_pre_refactor.json"
+    p = config.BASE_DIR / "proofs" / "baseline.json"
     return p if p.exists() else None
 
 

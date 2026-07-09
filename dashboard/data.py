@@ -231,8 +231,8 @@ def logo_manifest() -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def load_ranking() -> pd.DataFrame:
-    """The model's predicted forward-63d-Sharpe ranking (predictions_all89.csv — filename
-    retained for continuity; it holds all 97), joined to company name, sorted best-to-worst.
+    """The model's predicted forward-63d-Sharpe ranking (predictions_all.csv, all 97 names),
+    joined to company name, sorted best-to-worst.
 
     Adds a `confidence` column from the pipeline's provenance flags. NOTE:
     `out_of_training_dist` and `prediction_only` are identical by construction (a name held
@@ -240,7 +240,7 @@ def load_ranking() -> pd.DataFrame:
     confidence tier, not two. `no_release_date` is a strictly smaller subset (5 names with no
     usable yfinance release date -> no target could ever be built) and is called out
     separately, because it is a stronger caveat than mere out-of-training status."""
-    df = pd.read_csv(PRED_DIR / "predictions_all89.csv")
+    df = pd.read_csv(PRED_DIR / "predictions_all.csv")
     names = load_companies().set_index("ticker")["name"]
     df["name"] = df["ticker"].map(names)
     df = df.sort_values("rank_ensemble").reset_index(drop=True)

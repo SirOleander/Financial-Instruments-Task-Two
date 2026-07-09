@@ -919,12 +919,12 @@ def main_train():
     out["pred_ensemble"] = ens89
     out = out.sort_values("pred_ensemble", ascending=False).reset_index(drop=True)
     out["rank_ensemble"] = np.arange(1, len(out) + 1)
-    # filename kept (dashboard consumes it) though it now holds all 98
-    out.round(5).to_csv(os.path.join(PRED_OUT, "predictions_all89.csv"), index=False)
+    # holds ALL ranked names (currently 97), not 89 — the legacy "all89" name was renamed
+    out.round(5).to_csv(os.path.join(PRED_OUT, "predictions_all.csv"), index=False)
 
     write_summary_train(cv_df, test_df_out, best3, out)
     print(f"\nArtifacts -> {PRED_OUT}: cv_results.csv, test_metrics.csv, coef_/importance_*.csv, "
-          f"predictions_all89.csv, MODEL_SUMMARY.md")
+          f"predictions_all.csv, MODEL_SUMMARY.md")
 
 
 def ablation():
@@ -1036,7 +1036,7 @@ def write_summary_train(cv_df, test_df, best3, preds):
              "as lower-confidence).\n")
     L.append("**Top 10 (long):**\n" + tbl(top10))
     L.append("\n**Bottom 10 (short):**\n" + tbl(bot10))
-    L.append("\nFull ranking of all 89 in predictions_all89.csv (final models refit on ALL "
+    L.append("\nFull ranking of all names in predictions_all.csv (final models refit on ALL "
              "train_eligible rows; the 89 rows are each company's latest report, forward "
              "window still open — these are the ranking signals, not evaluable yet).")
 
