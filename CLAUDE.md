@@ -65,10 +65,10 @@ financial_facts 26,500 / daily_prices 156,666 / kpi_values 40,996 / scores 1,712
 modelling_data 1,712 — all **97 tickers**; target_63d 1,690 (93 tickers; 4 blocked names have
 no targets); operative_scores 1,597 (82 tickers; US 10-K/20-F only).
 modelling_data: **1,314 train_eligible across 72 companies** (70 US + GOOGL + GEV),
-398 prediction-only. predictions_all89.csv (filename kept for the dashboard) holds all **97**.
+398 prediction-only. predictions_all.csv (renamed from the legacy predictions_all89) holds all **97**.
 
 ### Final universe: 89 companies, TWO sources in one `financial_facts` table
-NOTE: superseded — universe is now 98 (see the 89→98 milestone above). Original 89 detail:
+NOTE: superseded — universe is now 97 (98 mandated − GOOG; see the milestone above). Original 89 detail:
 - **71 EDGAR** (US, `source='edgar'`) + **18 yfinance** (non-US, `source='yfinance'`).
 - Dropped from earlier lists: **GOOG** (kept GOOGL — same company, identical
   fundamentals, avoided double-counting Alphabet), **0700.HK (Tencent)** and
@@ -230,7 +230,7 @@ Settled decisions baked in:
   (all rows `train_eligible=0`, 141 rows) so the trained model can still SCORE them for the
   final ranking — held out of TRAINING only, because their 4–5-row histories are too thin
   and structurally annual-only. 354 rows total are train_eligible=0 (internationals +
-  every first_obs / target_missing US row). All 89 companies remain in the table.
+  every first_obs / target_missing US row). All 97 companies remain in the table.
 - **CAVEAT — winsor caps refit at split (leakage).** Caps are currently fit on the FULL
   population. At the time-based train/test split they MUST be refit on the TRAINING rows
   ONLY (train_eligible=1, pre-split) and re-applied — otherwise the test set leaks into the
@@ -295,7 +295,7 @@ DELIVERABLE is the leak-free end-to-end methodology, not alpha. Preserve this co
   CURRENT numbers): train+val 1025 rows / 72 companies, test 289, 48 features. CV Spearman ∈
   [−0.032,+0.012] (Lasso/EN still degenerate to the constant/null model); ensemble test
   Spearman (pooled) −0.022, per-period +0.012; ablation max |CV|=0.034, max |test|=0.062.
-  predictions_all89.csv (filename kept for dashboard) holds all **97** with flags
+  predictions_all.csv (renamed from the legacy predictions_all89) holds all **97** with flags
   out_of_training_dist / prediction_only (25) / no_release_date (5).
 - **BACKTEST P&L FLIPPED SIGN under the rf change — and THAT IS THE POINT. Do NOT present the
   new positive number as an edge.** Per-rebalance LS +17.7%/−4.7%/−11.6%/+13.6%, cum **+12.6%
@@ -340,7 +340,7 @@ DELIVERABLE is the leak-free end-to-end methodology, not alpha. Preserve this co
   legs rose ~+50% in a bull market (universe +43%); the strategy adds no spread. 4 rebalances
   ⇒ high-variance, do not over-interpret.
 - Artifacts (dashboard-consumable) in `predictions/`: cv_results, test_metrics,
-  ablation_results, coef_/importance_*, predictions_all89, backtest_periods/holdings/summary,
+  ablation_results, coef_/importance_*, predictions_all, backtest_periods/holdings/summary,
   fig_backtest_equity.png, MODEL_SUMMARY.md, BACKTEST_SUMMARY.md.
 
 ### SLIDE-24 GRADING ITEMS — DONE, regenerated on the FINAL 97 model (src/L_analysis.py → `analysis/`)
@@ -414,75 +414,80 @@ protocol, externally mandated. No iterative tuning against test.
 A university "Financial Instruments" quantitative equity strategy. The pipeline:
 extract financial signals from SEC filings → compute sector-specific KPI scores →
 predict a forward 63-trading-day Sharpe → rank companies long (top 10) / short
-(bottom 10) → backtest. Two phases:
-  - **Extraction + validation** — effectively CLOSED (this file's main subject).
-  - **Modelling** — the active next phase; see `docs/PROJECT_SPEC.md` and the
-    "Modelling phase" section below.
+(bottom 10) → backtest. Both phases are now **COMPLETE**:
+  - **Extraction + validation** — CLOSED (much of this file's detail).
+  - **Modelling** — CLOSED. The honest finding is a **near-null result** (report fundamentals
+    do not reliably predict the forward 63-day Sharpe on this universe/period); that is the
+    deliverable, not alpha. See the MODELLING + BACKTEST and slide-24 sections above.
+The whole thing now runs from one command — `python run_pipeline.py` (see Repo layout).
 
-Universe: 72 tickers across 13 implementation groups (= 9 economic sectors), 7 fiscal
-years fetched, latest period ~2026-05-31. A clean validator run currently produces
-~700 flags, almost all pre-adjudicated as benign (see the ledger below).
+Universe: **97 tickers** across 13 implementation groups (= 9 economic sectors), 6 fiscal
+years fetched, latest period ~2026-05-31. (The old 4-layer data validator is RETIRED now the
+extraction phase is closed — see "The validator — RETIRED" below; the benign-flag ledger it
+produced is kept for interpretability.)
 
-## Repo layout (modules live in `src/`)
+## Repo layout — the `fi/` package (post-refactor)
 
-- **A_config.py** — companies, CIKs, sectors, `COMPANY_GROUPS` (TechA–D, BankA,
-  FinA, CommA, DiscA, StapA, HealthA, IndA, EnergyA, EnergyB),
-  `FINANCIAL_ITEMS_BY_GROUP` (us-gaap concepts), `INLINE_FINANCIAL_ITEMS_BY_TICKER`
-  (iXBRL fallbacks), `CALCULATED_FINANCIAL_ITEMS`, `FINANCIAL_POSITION_SIGN_RULES`,
-  `FISCAL_YEARS_TO_FETCH = 6` (the value the DB was built on; earlier "7" was a doc error —
-  the constant never existed and the getattr fallback always yielded 6, now defined
-  explicitly), `validate_config()`.
-  `DATABASE_PATH = BASE_DIR/data/financials.db`, where `BASE_DIR` is the parent of
-  `src/`. `DECUMULATE_YTD_TICKERS` is now **dead/unused** — leave or delete.
-- **B_database.py** — SQLite at `data/financials.db`; one `financial_facts` table,
-  long format (one row per ticker/filing/position). `get_connection()` uses
-  `sqlite3.Row`. Unique index = (ticker, accession_number, position,
-  extraction_method). Missing values are stored as `0`, but
-  `selection_status == 'missing'` is what marks a real gap — never infer "missing"
-  from `value == 0`.
-- **C_client.py** — SEC fetch/parse. Year-based, FYE-aware accession selection;
-  `select_best_fact`; `apply_calculated_financial_items`; `build_standardized_rows`.
-  Contains the annual-duration floor fix (see "The ABBV/KLAC/GE fix" below).
-- **D_pipeline.py** — orchestration. `main()` calls
-  `create_tables(drop_existing=True)`, so **every run rebuilds the entire table**.
-  `TARGET_GROUPS` must list every group you want to keep or the rest get wiped; it
-  currently lists all 13.
-- **verify_release_dates.py** (formerly `debug.py`) — read-only release-date verifier:
-  confirms each EDGAR `report_release_date` == SEC filingDate against `us_release_dates.csv`.
-  The old 4-layer *data* validator has been **RETIRED** now the data phase is closed
-  (see "The validator — RETIRED" below); it no longer writes `validation_flags.csv` /
-  `concept_map.csv` (those files were deleted).
-- **Analytical modules** (built after extraction; details in `docs/PROJECT_SPEC.md`):
-  `E_kpis.py` (raw KPIs → `kpi_values`), `F_scores.py` (sector-percentile sub-scores →
-  `scores`), `G_operative.py` (LLM competitive-advantage score → `operative_scores`;
-  US 10-K/10-Q + intl 20-F), `price_ingest.py` (`daily_prices`), `price_target.py`
-  (`target_63d`).
-- **tools/** — non-pipeline diagnostics/utilities, OUTSIDE the flat-import path (each
-  adds a `sys.path` shim to reach `src/`): `price_probe.py`, `yf_probe.py`,
-  `viewdatabase.py` (Excel export → `outputs/`, uses `A_config.DATABASE_PATH`).
-- **docs/** — `PROJECT_SPEC.md`, `WORKFLOW.txt`, `TASK.txt`, and
-  `revalidate.archived.md` (the RETIRED re-validation routine, archived for reference).
+The code was consolidated from 16 flat, letter-prefixed `src/` modules into one package,
+`src/fi/`, run by a single entry point. **Old-name → new-home map** (old names appear
+throughout this file's history; they all resolve to `fi.*` now):
 
-Scripts use flat imports (`import A_config`), so run pipeline scripts from inside `src/`:
+| Old flat module | Now in | Notes |
+|---|---|---|
+| `A_config` | `fi.config` (+ `fi.concepts`) | the ~2,300 lines of us-gaap/iXBRL concept tables split into `fi.concepts`; `fi.config` is the part you read |
+| `B_database` | `fi.db` | |
+| `C_client` + `D_pipeline` | `fi.sec` | SEC client + EDGAR extraction, merged |
+| `yf_ingest` + `price_ingest` | `fi.market` | yfinance fundamentals + daily prices, merged |
+| `G_operative` | `fi.operative` | the only paid/LLM stage; kept separate |
+| `E_kpis` + `F_scores` + `price_target` + `H_modelling` | `fi.features` | KPIs, scores, target, modelling table |
+| `I_eda` + `J_models` + `K_backtest` + `L_analysis` | `fi.modelling` | EDA, train, backtest, slide-24 analysis; the old `import J_models as J` cross-import is gone |
+| — | `fi.pipeline` | NEW: the stage registry + CLI |
+| — | `fi.verify` | NEW: the proof harness (fingerprints + invariants) |
+| `verify_release_dates` | `tools/verify_release_dates.py` | read-only diagnostic, moved out of the pipeline |
+
+Load-bearing details that survive the move:
+- **`fi.config`** — companies, CIKs, sectors, `COMPANY_GROUPS` (TechA–D, BankA, FinA, CommA,
+  DiscA, StapA, HealthA, IndA, EnergyA, EnergyB), sign rules, `RISK_FREE_RATE_ANNUAL = 0.02`,
+  `FISCAL_YEARS_TO_FETCH = 6` (the value the DB was built on; earlier "7" was a doc error),
+  `validate_config()`, `DATABASE_PATH = BASE_DIR/data/financials.db`. The us-gaap concept maps
+  (`FINANCIAL_ITEMS_BY_GROUP`, `INLINE_FINANCIAL_ITEMS_BY_TICKER`, `CALCULATED_*`) live in
+  `fi.concepts` and are re-exported. `DECUMULATE_YTD_TICKERS` is **dead/unused**.
+- **`fi.db`** — one `financial_facts` table, long format (one row per ticker/filing/position).
+  `get_connection()` uses `sqlite3.Row`. Unique index = (ticker, accession_number, position,
+  extraction_method). Missing values are stored as `0`, but `selection_status == 'missing'` is
+  what marks a real gap — never infer "missing" from `value == 0`.
+- **`fi.sec`** — FYE-aware accession selection; `select_best_fact`;
+  `apply_calculated_financial_items`; `build_standardized_rows`; the annual-duration floor fix
+  (see "The ABBV/KLAC/GE fix"). Its `main()` is now **APPEND-ONLY** — see the cautions below.
+- **tools/** — non-pipeline diagnostics, each with a `sys.path` shim to reach `src/` and
+  importing `fi.*`: `price_probe.py`, `yf_probe.py`, `viewdatabase.py`,
+  `verify_release_dates.py` (EDGAR `report_release_date` == SEC filingDate check).
+- **docs/** — `PROJECT_SPEC.md`, `TASK.txt`; `docs/archive/` holds superseded notes
+  (`WORKFLOW.txt`, `revalidate.archived.md`).
+
+### Running — ONE command
+
 ```
-cd src
-python D_pipeline.py            # full rebuild — DESTRUCTIVE, see cautions
-python verify_release_dates.py  # read-only release-date check (needs us_release_dates.csv)
+python run_pipeline.py --offline   # recompute all local stages from the committed DB
+python run_pipeline.py             # every stage: fetch latest data (append-only), retrain
+python run_pipeline.py --list      # the 12-stage plan
+python run_pipeline.py --verify    # invariants only (read-only)
+python src/fi/verify.py --check proofs/baseline.json   # fingerprint vs the recorded baseline
 ```
-(`tools/` scripts run from the repo root, e.g. `python tools/viewdatabase.py`.)
+(`tools/` scripts still run from the repo root, e.g. `python tools/viewdatabase.py`.)
 
 ## CRITICAL cautions
 
-1. `main()` is `drop_existing=True` → a full 13-group rebuild every run. Make **all**
-   config edits *before* a single rebuild. Confirm `TARGET_GROUPS` still lists all 13
-   groups before running.
-   **Finality:** `TARGET_GROUPS` matters *only* at rebuild time, and any group not in
-   it when `D_pipeline.py` runs is dropped from the DB with **no warning and no
-   recovery short of re-fetching**. Never narrow `TARGET_GROUPS` for a "focused" run —
-   a single-group rebuild silently nukes the other 12. To work on one group, rebuild
-   all 13 and filter downstream.
-2. Re-confirm the **AXP `total_loans`** value survives any rebuild (see Adjudications).
-   It has been silently wiped by a rebuild before.
+1. **Ingestion is APPEND-ONLY (as of the step-7 refactor).** `fi.sec.main()` calls
+   `create_tables(drop_existing=False)` and UPSERTS on the unique key — it NEVER drops
+   `financial_facts`. The old `drop_existing=True` full-rebuild is gone, and with it the
+   `TARGET_GROUPS` footgun (a run that omitted a group used to silently wipe it) and the risk
+   of a re-fetch wiping the yfinance non-US rows. Restatements are overwritten AND logged
+   old→new; orphans (rows a re-fetch no longer produces) are kept AND reported. See
+   `find_restatements` / `find_orphans` in `fi.sec`.
+2. The **AXP `total_loans`** adjudication (see Adjudications) is now safe by construction:
+   append-only never deletes it. It only changes if SEC itself restates it — in which case
+   the restatement is logged old→new, never silent.
 3. Prefer read-only diagnostics before any destructive write. Prefer targeted patches
    over whole-file replacements. Always be explicit about which file a change goes in
    (pipeline vs config vs client vs validator).
@@ -654,8 +659,9 @@ StapA → Consumer Staples; HealthA → Healthcare; BankA → Banks; FinA → Fi
 Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilities.
 
 ### Spec-vs-current GAPS — reconcile before building features (don't assume these away)
-1. **Company count:** spec says 98 companies; current universe is 72 tickers. Reconcile
-   (trimmed universe vs original target) — a human call, not a silent fix.
+1. **Company count: RESOLVED.** Spec mandates 98; the working universe is **97** (98 − GOOG,
+   the documented Alphabet dual-class dedup — see the milestone at the top). No longer an open
+   gap; kept here for history.
 2. **Report release date:** the spec's timing/look-ahead rules require the filing/
    acceptance date. `financial_facts` stores period-end (`fact_end_date`), not clearly
    the release date. VERIFY the pipeline captures filing date (it's in the SEC
@@ -727,7 +733,7 @@ Services; IndA → Industrials; EnergyA + EnergyB → Energy, Materials & Utilit
        `stMarkdown` and `stMarkdownContainer` collapses to content height, so a percentage
        never resolves.
   Trade-off accepted: **column-header sorting is gone** (st.dataframe gave it for free). The
-  table is rank-ordered, which is the point. `predictions_all89.csv` order is authoritative.
+  table is rank-ordered, which is the point. `predictions_all.csv` order is authoritative.
 - **NO per-row confidence/provenance column on Ranking.** A per-row "prediction-only" flag
   contradicted the ranking by marking the very rows it recommends. The disclosure lives once,
   at tab level, in `ui.scope_note()` with DERIVED counts (72 trained / 97 ranked / 25
@@ -921,5 +927,5 @@ Prefer targeted patches over whole-file rewrites.
 
 One-off jobs live as prompts/notes so this file stays durable standing context. The old
 re-validation routine (formerly `.claude/revalidate.md`) is **RETIRED** and archived at
-`docs/revalidate.archived.md` — it documents the retired 4-layer validator and is NOT a
+`docs/archive/revalidate.archived.md` — it documents the retired 4-layer validator and is NOT a
 live routine.

@@ -67,4 +67,4 @@ EDA showed max single-feature |Spearman| ~0.075; the models confirm it. **CV Spe
 | 96 | INTC | Technology | -0.2293 | 0 |
 | 97 | SHOP.TO | Technology | -0.7199 | 1 |
 
-Full ranking of all names in predictions_all.csv (final models refit on ALL train_eligible rows; the 89 rows are each company's latest report, forward window still open — these are the ranking signals, not evaluable yet).
+Full ranking of all names in predictions_all.csv (final models refit on ALL train_eligible rows; the 97 rows are each company's latest report, forward window still open — these are the ranking signals, not evaluable yet).

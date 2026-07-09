@@ -3,129 +3,162 @@
 A university "Financial Instruments" quantitative equity-strategy pipeline. For each company
 report it extracts financial signals from SEC filings, turns them into sector-relative KPI
 scores and an LLM-derived competitive-advantage ("operative") score, uses those signals to
-predict the company's **forward 63-trading-day risk-adjusted return (Sharpe)**, ranks the
-universe to form a long (top) / short (bottom) portfolio, and backtests under strict
-look-ahead controls. Universe: **89 companies** across 9 economic sectors, from **two data
-sources** (US EDGAR filers + non-US names via yfinance) unified in one database.
+predict the company's **forward 63-trading-day risk-adjusted return (excess Sharpe, risk-free
+= 2%)**, ranks the universe into a long (top-10) / short (bottom-10) book, and backtests it
+under strict look-ahead controls.
 
-> **Intent & decisions** live in [`CLAUDE.md`](CLAUDE.md); the full 17-step assignment plan
+**Universe: 97 companies** across 9 economic sectors, from **two data sources** (US EDGAR
+filers + non-US names via yfinance) unified in one database. 97 = the assignment's mandated 98
+minus GOOG, a documented Alphabet dual-class dedup (GOOGL is kept; both share one SEC filer
+with byte-identical fundamentals).
+
+**The headline finding is a null result, and that is the deliverable.** Report fundamentals
+show no reliable, generalizable signal for the forward 63-day Sharpe on this universe/period
+(cross-validated rank-correlation ≈ 0, robust across a feature-set ablation and the universe
+changes). That is what market efficiency predicts; the deliverable is the **leak-free,
+end-to-end, reproducible methodology**, not alpha. Do not tune it into a positive result.
+
+> **Intent & decisions** live in [`CLAUDE.md`](CLAUDE.md). The full 17-step assignment plan
 > (signal formulas, scoring rubric, backtest spec) lives in
-> [`docs/PROJECT_SPEC.md`](docs/PROJECT_SPEC.md).
+> [`docs/PROJECT_SPEC.md`](docs/PROJECT_SPEC.md); the lecturer's brief is
+> [`docs/TASK.txt`](docs/TASK.txt).
 
-## Pipeline at a glance
+## Quick start
 
-Modules in `src/` use flat imports and an `A_`/`B_`/… prefix that encodes load order.
+```bash
+pip install -r requirements.txt          # Python 3.11  (conda environment.yaml also provided)
 
-| Step | Module | Reads | Produces |
+python run_pipeline.py --offline         # recompute everything from the committed database
+streamlit run dashboard/app.py           # explore the results (reads the DB + artifacts)
+```
+
+`--offline` runs the eight local stages (KPIs → scores → target → modelling table → EDA →
+train → backtest → analysis) from the raw data already in `data/financials.db`. It needs no
+network and no API key, and reproduces the committed numbers exactly.
+
+## The pipeline — one command
+
+```bash
+python run_pipeline.py                    # every stage: fetch latest data, then retrain
+python run_pipeline.py --offline          # local stages only (no network / API key)
+python run_pipeline.py --list             # print the 12-stage plan and exit
+python run_pipeline.py --from kpis --to backtest      # run a contiguous slice
+python run_pipeline.py --verify           # run the invariant suite only (read-only)
+python run_pipeline.py --force            # keep a content-identical DB rewrite (no restore)
+```
+
+Stages, in dependency order (`[net]` = needs the internet / an API key, skipped by `--offline`):
+
+| # | Stage | Kind | Produces |
 |---|---|---|---|
-| Config | `A_config.py` | — | universe, concept maps, paths (imported everywhere) |
-| DB layer | `B_database.py` | — | `financial_facts` schema + read/write helpers |
-| SEC client | `C_client.py` | SEC EDGAR (network) | standardized facts for `D_pipeline` |
-| EDGAR extract | `D_pipeline.py` | A/B/C | **`financial_facts`** (US, `source='edgar'`) |
-| Non-US ingest | `yf_ingest.py` | yfinance | **`financial_facts`** (non-US, `source='yfinance'`) |
-| Prices | `price_ingest.py` | yfinance | **`daily_prices`** |
-| Target | `price_target.py` | `daily_prices` + `financial_facts` | **`target_63d`** |
-| KPIs | `E_kpis.py` | `financial_facts` | **`kpi_values`** |
-| Scores | `F_scores.py` | `kpi_values` | **`scores`** (6 sub-scores + `financial_score`) |
-| Operative | `G_operative.py` | SEC filings (LLM) | **`operative_scores`** |
+| 1 | `sec_facts`  | `[net]` | `financial_facts` (US EDGAR) |
+| 2 | `yf_facts`   | `[net]` | `financial_facts` (non-US, yfinance) |
+| 3 | `prices`     | `[net]` | `daily_prices` |
+| 4 | `kpis`       | local | `kpi_values` |
+| 5 | `scores`     | local | `scores` (6 sub-scores + `financial_score`) |
+| 6 | `operative`  | `[net]` | `operative_scores` (LLM, new filings only) |
+| 7 | `target`     | local | `target_63d` (forward 63-day excess Sharpe) |
+| 8 | `modelling`  | local | `modelling_data` (features joined to target) |
+| 9 | `eda`        | local | `eda/` |
+| 10 | `train`     | local | `predictions/` (CV, ensemble, ablation) |
+| 11 | `backtest`  | local | `predictions/` (walk-forward long/short) |
+| 12 | `analysis`  | local | `analysis/` (bias-variance, importance, classification) |
 
-Release-date integrity is checked (read-only) by `src/verify_release_dates.py`.
+**Ingestion is append-only and idempotent.** A re-fetch upserts on the fundamentals' unique
+key and never drops a table: historical rows — including the non-US yfinance rows and any
+adjudicated value — are never deleted. Restatements are overwritten **and logged** old→new;
+rows a re-fetch no longer produces are kept **and reported** as orphans.
 
-## Database tables (`data/financials.db`, SQLite)
+**The LLM stage is key-guarded.** `operative` reads its key from the `LITELLM_API_KEY`
+environment variable (never hardcode it). With no key and new filings it warns and skips them
+(they fall back to the financial score), so a run still completes.
+
+```bash
+export LITELLM_API_KEY=<your key>        # only needed to score NEW filings live
+```
+
+**A no-op run leaves the tracked database byte-clean.** Because every write is
+`INSERT OR REPLACE` (which resets `id`/`created_at`), a content-identical rerun would still
+rewrite the 30 MB file. The pipeline snapshots the DB before the run and restores it
+byte-for-byte when the post-run content is unchanged (`--force` keeps the rewrite instead).
+The snapshot doubles as a rolling backup at `data/financials.db.bak_auto` (git-ignored).
+
+## Database tables (`data/financials.db`, SQLite, git-tracked)
 
 - **financial_facts** — long-format fundamentals, one row per (ticker, filing, position); both sources.
 - **daily_prices** — adjusted daily close per (ticker, date), each series in its own listing currency.
-- **target_63d** — per (ticker, report release date): forward 63-trading-day return, volatility, Sharpe.
-- **kpi_values** — raw per-report KPI ratios (long format) with a `computable` flag.
+- **target_63d** — per (ticker, report release date): forward 63-day excess Sharpe (rf = 2%), return, volatility.
+- **kpi_values** — raw per-report KPI ratios (long format).
 - **scores** — sector-percentile sub-scores (profitability, growth, cash_flow, leverage, efficiency, investment) + `financial_score`.
 - **operative_scores** — LLM competitive-advantage score (1–5, rescaled 0–1) per filing; US 10-K/10-Q + international 20-F.
 
-`data/financials.db` is the canonical, **versioned** dataset and is tracked in git.
+`data/financials.db` is the canonical, **versioned** dataset.
 
-### `data/ohlc_display.db` — rebuildable, NOT tracked
+### `data/ohlc_display.db` — rebuildable, NOT tracked, firewalled
 
 A **separate** SQLite file holding raw (unadjusted) OHLC, used solely to draw the dashboard's
-Company Detail price chart. It is **git-ignored**: a display cache, not canonical data.
+Company Detail price chart. It is **git-ignored** — a display cache, not canonical data — and
+**firewalled from the modelling pipeline**:
 
-```
+- Nothing in `src/` reads it; no feature, target or score derives from it (an invariant the
+  proof harness enforces).
+- It is a separate *file*, not a table in `financials.db`, so the modelling DB is never opened
+  for writing during the fetch — its file hash is provably unchanged.
+- `daily_prices` (**adjusted** close) remains the target's price source. The OHLC store is
+  **unadjusted** on purpose (a chart shows prices as traded); the two series differ by design.
+  Do not reconcile them, or you corrupt the target.
+
+```bash
 python dashboard/fetch_ohlc.py            # regenerate (yfinance, 2020-01-01 → today)
 python dashboard/fetch_ohlc.py --report   # coverage only, writes nothing
 ```
 
-It is **firewalled from the modelling pipeline** and must stay that way:
+Without this file the dashboard degrades gracefully to the `daily_prices` line, then a caption.
 
-- Nothing in `src/` reads it. No feature, target or score derives from it.
-- It is a separate *file*, not a table in `financials.db`, so the modelling database is never
-  opened for writing — its file hash is provably unchanged by the fetch.
-- `daily_prices` (**adjusted** close, in `financials.db`) remains the target's price source.
-  The OHLC store is **unadjusted** on purpose, because a chart should show prices as traded.
-  The two series differ numerically **by design** — do not "reconcile" them, or you corrupt
-  `future_63d_sharpe`.
+## Where results land
 
-Without this file the dashboard degrades gracefully: the detail page falls back to the
-`daily_prices` adjusted-close line, then to a caption. It never errors.
+- `eda/` — feature→target correlation, distributions, VIF, missingness.
+- `predictions/` — CV & test metrics, coefficients/importances, `predictions_all.csv` (the full
+  97-name ranking), the backtest, `MODEL_SUMMARY.md`.
+- `analysis/` — the slide-24 grading items: bias-variance & learning curves, feature
+  importance, the classification lens.
 
-## Setup
+The Streamlit dashboard reads the database plus these three directories and **writes nothing**.
 
-- **Python 3.11**
-- Install dependencies:
-  ```
-  pip install -r requirements.txt
-  ```
-  (A conda `environment.yaml` is also provided.)
-- The operative score (`G_operative.py`) calls a LiteLLM endpoint and reads its API key from
-  the **`LITELLM_API_KEY`** environment variable (never hardcode it):
-  ```
-  export LITELLM_API_KEY=<your key>
-  ```
+## Proof harness — reproducibility you can check
 
-## Running
+The pipeline is deterministic (fixed seeds), so behavior can be verified, not assumed:
 
-Pipeline scripts run from inside `src/` (flat imports). Most take `--write` (they are
-read-only/dry-run without it) and are idempotent:
-
-```
-cd src
-python D_pipeline.py                       # EDGAR extract -> financial_facts  (DESTRUCTIVE rebuild, network)
-python yf_ingest.py --write                # non-US fundamentals -> financial_facts
-python price_ingest.py --write             # daily_prices
-python price_target.py --write             # target_63d
-python E_kpis.py --write                   # kpi_values
-python F_scores.py --write                 # scores
-python G_operative.py --write --concurrency 16          # operative_scores (US 10-K/10-Q)
-python G_operative.py --intl-write --concurrency 16 --since-year 2020   # operative_scores (intl 20-F)
-python verify_release_dates.py             # read-only release-date check
+```bash
+python src/fi/verify.py --check proofs/baseline.json   # content of all 7 tables + all
+                                                        # artifacts vs a recorded baseline
+python src/fi/verify.py                                 # the load-bearing invariants only
 ```
 
-> **Caution:** `D_pipeline.py` drops and rebuilds `financial_facts` from SEC on every run —
-> see the rebuild cautions in `CLAUDE.md` before running it.
-
-Diagnostics/utilities in `tools/` run from the **repo root**:
-
-```
-python tools/viewdatabase.py   # export financial_facts to outputs/financials_database_export.xlsx
-python tools/price_probe.py    # read-only price-coverage probe
-python tools/yf_probe.py       # read-only yfinance statement probe
-```
-
-## Status
-
-The **data + feature layer is complete**: 89 companies across two sources, with all six
-tables populated (fundamentals, prices, target, KPIs, sector-percentile scores, and the
-operative LLM score for US filings + international 20-Fs). **Modelling** — assembling the
-change features + training/evaluating models to predict the 63-day Sharpe, then
-ranking/backtesting — is the next phase (see `docs/PROJECT_SPEC.md`).
+`verify.py` fingerprints every table (excluding volatile `id`/`created_at`) and every generated
+artifact, and asserts the project's invariants: the 97-universe + GOOG dedup, look-ahead safety,
+the rf = 2% audit identity, the OHLC firewall, the long/short sign convention, append-only
+ingest, and the near-null result itself. `run_pipeline.py` runs the invariants at the end of
+every run.
 
 ## Repository layout
 
 ```
-src/       pipeline modules (A_config … G_operative, price_ingest, price_target, yf_ingest,
-           verify_release_dates)
-dashboard/ Streamlit app (read-only) + fetch_logos.py, fetch_ohlc.py
-tools/     non-pipeline diagnostics/utilities (run from repo root)
-docs/      PROJECT_SPEC.md, WORKFLOW.txt, TASK.txt, revalidate.archived.md
-data/      financials.db     (the versioned dataset; tracked in git)
-           ohlc_display.db   (rebuildable display cache; git-ignored — see above)
-outputs/   generated exports (git-ignored)
-CLAUDE.md  project state, conventions, and decisions
+run_pipeline.py   the single entry point (thin shim into fi.pipeline)
+src/fi/           the pipeline package:
+                    config, concepts   universe, sector maps, us-gaap/iXBRL concept tables
+                    db                 SQLite schema + read/write helpers
+                    sec, market        network ingest (EDGAR + yfinance)
+                    operative          the LLM competitive-advantage score (only paid stage)
+                    features           KPIs, sector scores, target, modelling table
+                    modelling          EDA, training, backtest, slide-24 analysis
+                    pipeline           the stage registry + CLI
+                    verify             the proof harness (fingerprints + invariants)
+dashboard/        Streamlit app (read-only) + fetch_logos.py, fetch_ohlc.py
+tools/            non-pipeline diagnostics (run from repo root): viewdatabase, price_probe,
+                  yf_probe, verify_release_dates
+docs/             PROJECT_SPEC.md, TASK.txt; archive/ (superseded notes)
+proofs/           baseline.json — the recorded content fingerprint
+data/             financials.db (versioned) · ohlc_display.db (rebuildable, git-ignored)
+CLAUDE.md         project state, conventions, and decisions
 ```

@@ -761,7 +761,7 @@ def load():
     split = pd.Timestamp(SPLIT_DATE)
     trainval = te[te["rd"] <= split].reset_index(drop=True)
     test = te[te["rd"] > split].reset_index(drop=True)
-    # all-89 latest row per ticker (the forward ranking rows)
+    # all-97 latest row per ticker (the forward ranking rows)
     latest_idx = df.groupby("ticker")["rd"].idxmax()
     pred89 = df.loc[latest_idx].reset_index(drop=True)
     return df, trainval, test, pred89
@@ -896,7 +896,7 @@ def main_train():
             s = pd.Series(reg.feature_importances_, index=feat_order, name="importance")
             s.sort_values(ascending=False).to_csv(os.path.join(PRED_OUT, f"importance_{name}.csv"))
 
-    # ---- final models refit on ALL train_eligible, predict ALL 98 latest rows ----
+    # ---- final models refit on ALL train_eligible, predict ALL 97 latest rows ----
     all_te = df[df["train_eligible"] == 1]
     Xall, yall = build_X(all_te), all_te[TARGET_RAW].values
     Xp = build_X(pred89)
@@ -1037,7 +1037,7 @@ def write_summary_train(cv_df, test_df, best3, preds):
     L.append("**Top 10 (long):**\n" + tbl(top10))
     L.append("\n**Bottom 10 (short):**\n" + tbl(bot10))
     L.append("\nFull ranking of all names in predictions_all.csv (final models refit on ALL "
-             "train_eligible rows; the 89 rows are each company's latest report, forward "
+             "train_eligible rows; the 97 rows are each company's latest report, forward "
              "window still open — these are the ranking signals, not evaluable yet).")
 
     with open(os.path.join(PRED_OUT, "MODEL_SUMMARY.md"), "w", encoding="utf-8") as f:
@@ -1307,7 +1307,7 @@ def _sp(y, p):
 
 
 def tuned_params() -> dict[str, dict]:
-    """Best hyperparameters from the committed 98-run (predictions/cv_results.csv)."""
+    """Best hyperparameters from the committed 97-run (predictions/cv_results.csv)."""
     cv = pd.read_csv(os.path.join(PRED_OUT, "cv_results.csv"))
     return {r["model"]: ast.literal_eval(r["best_params"]) for _, r in cv.iterrows()}
 
