@@ -977,8 +977,10 @@ def _combine_candidate_facts(*frames: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(non_empty_frames, ignore_index=True)
 
 
-def process_ticker(session: requests.Session, ticker: str) -> int:
-    """Retrieve, standardize, calculate, and store one ticker."""
+def process_ticker(session: requests.Session, ticker: str) -> tuple[int, int, int]:
+    """Retrieve, standardize, calculate, and store one ticker (append-only upsert).
+
+    Returns (rows_upserted, restatements, orphans_retained)."""
     ciks = config.get_ciks(ticker)
 
     filing_frames: list[pd.DataFrame] = []
@@ -999,7 +1001,7 @@ def process_ticker(session: requests.Session, ticker: str) -> int:
 
     if not filing_frames:
         logger.info("No SEC filings found for %s", ticker)
-        return 0
+        return 0, 0, 0
 
     filings = (
         pd.concat(filing_frames, ignore_index=True)
@@ -1010,7 +1012,7 @@ def process_ticker(session: requests.Session, ticker: str) -> int:
 
     if selected_filings.empty:
         logger.info("No 10-K / 10-Q filings found for %s", ticker)
-        return 0
+        return 0, 0, 0
 
     candidate_frames: list[pd.DataFrame] = []
 
@@ -1065,20 +1067,38 @@ def process_ticker(session: requests.Session, ticker: str) -> int:
     standardized["value"] = standardized["value"].fillna(0)
 
     rows = standardized.to_dict("records")
+
+    # APPEND-ONLY reporting, computed against the PRE-UPSERT state so nothing is masked by
+    # the write itself. Restatements are logged old->new; orphans (stored rows this run no
+    # longer produces) are reported and RETAINED — the upsert below never deletes.
+    existing = _existing_facts_by_key(ticker)
+    produced = {fact_key(r) for r in rows}
+    restatements = find_restatements(rows, existing)
+    orphans = find_orphans(produced, existing)
+    for (tk, acc, pos, em), old, new in restatements:
+        logger.warning("RESTATED %s %s %s [%s]: %r -> %r", tk, acc, pos, em, old, new)
+    if orphans:
+        sample = ", ".join(f"{acc}/{pos}" for (_, acc, pos, _) in orphans[:5])
+        logger.warning("ORPHANED %s: %s stored row(s) not reproduced this run — RETAINED "
+                       "(append-only): %s%s", ticker, len(orphans), sample,
+                       " ..." if len(orphans) > 5 else "")
+
     db.insert_financial_facts(rows)
 
     logger.info(
-        "%s: %s filings selected across %s CIK(s), %s rows inserted "
-        "(%s calculated, %s still missing)",
+        "%s: %s filings selected across %s CIK(s), %s rows upserted "
+        "(%s calculated, %s still missing, %s restated, %s orphaned+kept)",
         ticker,
         len(selected_filings),
         len(ciks),
         len(rows),
         calculated_count,
         missing_count,
+        len(restatements),
+        len(orphans),
     )
 
-    return len(rows)
+    return len(rows), len(restatements), len(orphans)
 
 
 def print_validation_summary() -> None:
@@ -1258,7 +1278,14 @@ def decumulate_ytd_flows(rows: pd.DataFrame, ticker: str) -> pd.DataFrame:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    db.create_tables(drop_existing=True)
+    # APPEND-ONLY: never drop financial_facts. A re-fetch UPSERTS on the unique key
+    # (ticker, accession_number, position, extraction_method); historical rows — including
+    # the yfinance-sourced non-US rows and any adjudicated value (e.g. AXP total_loans) — are
+    # never deleted. Restatements are overwritten AND logged; orphans (keys a re-fetch no
+    # longer produces) are kept AND reported. This eliminates the old drop-and-rebuild, whose
+    # TARGET_GROUPS footgun could silently wipe unrelated groups. See find_restatements /
+    # find_orphans, and the append-only proofs in the step-7 commit.
+    db.create_tables(drop_existing=False)
 
     tickers = get_target_tickers()
     if not tickers:
@@ -1267,23 +1294,69 @@ def main() -> None:
     logger.info("Target groups: %s", TARGET_GROUPS)
     logger.info("Tickers (%s): %s\n", len(tickers), tickers)
 
-    total_rows = 0
+    total_rows = restated = orphaned = 0
     failed: list[str] = []
 
     with make_session() as session:
         for ticker in tickers:
             logger.info("Processing %s...", ticker)
             try:
-                total_rows += process_ticker(session, ticker)
+                n_rows, n_rest, n_orph = process_ticker(session, ticker)
+                total_rows += n_rows
+                restated += n_rest
+                orphaned += n_orph
             except Exception as exc:
                 failed.append(ticker)
                 logger.exception("FAILED %s: %s", ticker, exc)
 
-    logger.info("\nDone. Inserted %s rows for %s ticker(s).", total_rows, len(tickers) - len(failed))
+    logger.info("\nDone. Upserted %s rows for %s ticker(s). Append-only: 0 rows deleted; "
+                "%s restatement(s) overwritten+logged, %s orphan(s) retained+reported.",
+                total_rows, len(tickers) - len(failed), restated, orphaned)
 
     if total_rows:
         print_validation_summary()
     if failed:
         logger.warning("Failed tickers: %s", failed)
+
+
+# --------------------------------------------------------------------------- #
+# append-only ingest: restatement + orphan reporting (nothing is ever deleted)
+# --------------------------------------------------------------------------- #
+FACT_UNIQUE_KEY = ("ticker", "accession_number", "position", "extraction_method")
+
+
+def fact_key(row: dict) -> tuple:
+    """The financial_facts unique key of a standardized row (matches the DB unique index)."""
+    return tuple(row.get(k) for k in FACT_UNIQUE_KEY)
+
+
+def _existing_facts_by_key(ticker: str) -> dict[tuple, object]:
+    """{unique-key: stored value} for one ticker. Empty when the ticker is new to the DB."""
+    with closing(db.get_connection()) as con:
+        rows = con.execute(
+            "SELECT ticker, accession_number, position, extraction_method, value "
+            "FROM financial_facts WHERE ticker = ?", (ticker,)).fetchall()
+    return {(r["ticker"], r["accession_number"], r["position"], r["extraction_method"]): r["value"]
+            for r in rows}
+
+
+def find_restatements(new_rows: list[dict], existing_by_key: dict[tuple, object]) -> list[tuple]:
+    """Existing keys whose stored value differs from the value this run produces.
+
+    Returns [(key, old, new), ...]. INSERT OR REPLACE overwrites these — deliberately: a
+    genuine SEC restatement should update the value — but every one is LOGGED old->new so a
+    silent change (the class of bug that once moved an adjudicated value) is impossible.
+    """
+    changed = []
+    for r in new_rows:
+        k = fact_key(r)
+        if k in existing_by_key and existing_by_key[k] != r.get("value"):
+            changed.append((k, existing_by_key[k], r.get("value")))
+    return changed
+
+
+def find_orphans(produced_keys: set, existing_by_key: dict[tuple, object]) -> list[tuple]:
+    """Existing keys this run did NOT reproduce. Append-only KEEPS them; we only report."""
+    return [k for k in existing_by_key if k not in produced_keys]
 
 
