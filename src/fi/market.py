@@ -496,15 +496,27 @@ def create_prices_table() -> None:
 
 
 def universe() -> list[dict]:
-    """Distinct (ticker, source) + uniform start, from financial_facts."""
+    """Distinct (ticker, source) + uniform start, from financial_facts.
+
+    The earliest-release anchor uses COALESCE(report_release_date, fiscal_period_end_date).
+    Four names (CBA.AX, MC.PA, NESN.SW, RHHBY) have NO usable yfinance release date at all, and
+    the old `WHERE report_release_date IS NOT NULL` acted as a TICKER FILTER as well as a NULL
+    filter — silently dropping them from the price fetch entirely, so a from-scratch build gave
+    them no daily_prices rows (93 tickers instead of 97). The surrogate key mirrors what
+    fi.features already does for these same names.
+
+    `fiscal_period_end_date` is a KEY SURROGATE ONLY here — it merely anchors how far back to
+    fetch prices. It is never a target t=0: price_target still requires a real
+    report_release_date, so these four names still get NO forward target. See FINDINGS.md #9.
+    """
     with closing(db.get_connection()) as con:
         rows = con.execute(
             """
             SELECT ticker,
-                   MAX(source)              AS source,
-                   MIN(report_release_date) AS earliest_release
+                   MAX(source) AS source,
+                   MIN(COALESCE(report_release_date, fiscal_period_end_date))
+                       AS earliest_release
             FROM financial_facts
-            WHERE report_release_date IS NOT NULL
             GROUP BY ticker
             ORDER BY source, ticker
             """
