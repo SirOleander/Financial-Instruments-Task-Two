@@ -50,6 +50,7 @@ import os
 import shutil
 import sys
 import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -213,11 +214,33 @@ def main(argv: list[str] | None = None) -> int:
               "no snapshot to take, skip-if-unchanged disabled for this run.\n")
 
     t0 = time.time()
+    failed: str | None = None
     for i, s in enumerate(plan, 1):
         print(f"[{i}/{len(plan)}] {s.name:11s} {s.description}")
         st = time.time()
-        s.run()
+        try:
+            s.run()
+        except Exception:
+            # The stages are a dependency chain, so we STOP rather than continue: a later stage
+            # would otherwise read a half-built table. The value here is a clear resume hint and
+            # a non-zero exit code instead of a bare traceback that discards the run's context.
+            failed = s.name
+            traceback.print_exc()
+            print(f"\n*** STAGE '{s.name}' FAILED after {time.time() - st:.1f}s.\n"
+                  f"    Fix the cause, then resume with:  python run_pipeline.py "
+                  f"--from {s.name}\n")
+            break
         print(f"            done in {time.time() - st:.1f}s\n")
+
+    if failed is not None:
+        # Do NOT restore the snapshot: whatever earlier stages fetched is real work and must
+        # survive so the run can be resumed with `--from`. Do NOT run the invariants either —
+        # they would be evaluated against a half-built database.
+        print(f"PIPELINE INCOMPLETE — stage '{failed}' failed after "
+              f"{time.time() - t0:.1f}s. Work from earlier stages is RETAINED.")
+        if writes and db_existed:
+            print(f"A pre-run backup of the database is at {BACKUP_PATH.name}.")
+        return 1
 
     # skip-if-unchanged: restore the byte-identical snapshot when content did not move.
     # Skipped entirely on a from-scratch build (snapshot_before is None): there is no prior
