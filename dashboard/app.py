@@ -225,27 +225,84 @@ def view_ranking(logos: dict) -> None:
     st.caption("Click any row to open its Company Detail.")
 
 
+def _ensemble_spec(tm) -> tuple[str, str, list[str]]:
+    """(raw name, combination rule, member models) parsed FROM THE ARTIFACT, never hard-coded.
+
+    `test_metrics.csv` names the ensemble self-describingly, e.g.
+    `ENSEMBLE(mean:SVR+XGBoost+RandomForest)`, so the dashboard can state exactly how the
+    models were combined without recomputing anything or duplicating the roster."""
+    import re
+    raw = tm.loc[tm["model"].str.startswith("ENSEMBLE"), "model"].iloc[0]
+    how, members = re.search(r"\((.*)\)", raw).group(1).split(":")
+    return raw, how, members.split("+")
+
+
 def _tab_performance(mode, cv, tm) -> None:
     """CV selection + the one-shot test. (Feature→target correlation now lives under Data.)"""
     import pandas as pd
     import charts
 
+    ens_raw, ens_how, ens_members = _ensemble_spec(tm)
+    ens_label = f"ENSEMBLE — {ens_how}({' + '.join(ens_members)})"
+
     ui.section("Model performance · CV selection + one-shot test")
-    perf = cv.merge(tm[["model", "test_spearman_pooled", "test_rmse"]], on="model", how="left")
-    perf = perf.sort_values("cv_spearman_mean", ascending=False)
+    # OUTER merge, not left: cv_results.csv holds only the six INDIVIDUAL models, so a left
+    # merge on `cv` silently dropped the ENSEMBLE row from test_metrics.csv. The ensemble is
+    # the deployed model — it must appear in this table, not just in a tile.
+    cols = ["model", "test_spearman_pooled", "test_spearman_perperiod_mean", "test_rmse"]
+    perf = cv.merge(tm[cols], on="model", how="outer")
+    indiv = perf[perf["model"] != ens_raw].sort_values("cv_spearman_mean", ascending=False)
+    perf = pd.concat([perf[perf["model"] == ens_raw], indiv], ignore_index=True)
+
+    def _cv(m, s):
+        # the ensemble is never cross-validated: it is an average of already-tuned models,
+        # evaluated once on the untouched test set. Say so rather than print a spurious NaN.
+        return "—  not cross-validated" if pd.isna(m) else f"{m:+.3f} ± {s:.3f}"
+
+    def _note(row):
+        if row["model"] == ens_raw:
+            return "COMBINED MODEL · produces the final ranking + drives the backtest"
+        # Two traps here. (a) degenerate_constant is NaN on the outer-merged ensemble row, and
+        # NaN is TRUTHY — an unguarded `if d` mislabels the ensemble as a null/constant model.
+        # (b) the value is a numpy.bool_, so `d is True` is always False and would silently
+        # drop the label from Lasso/ElasticNet. Hence: notna AND bool().
+        d = row["degenerate_constant"]
+        return "null / constant model" if (pd.notna(d) and bool(d)) else ""
+
     table = pd.DataFrame({
-        "Model": perf["model"],
-        "CV Spearman": [f"{m:+.3f} ± {s:.3f}" for m, s in
+        "Model": [ens_label if m == ens_raw else m for m in perf["model"]],
+        "CV Spearman": [_cv(m, s) for m, s in
                         zip(perf["cv_spearman_mean"], perf["cv_spearman_std"])],
-        "Test Spearman": perf["test_spearman_pooled"].map(lambda v: f"{v:+.3f}"),
+        "Test Spearman (pooled)": perf["test_spearman_pooled"].map(lambda v: f"{v:+.3f}"),
+        "Test Spearman (per-period)": perf["test_spearman_perperiod_mean"].map(lambda v: f"{v:+.3f}"),
         "Test RMSE": perf["test_rmse"].map(lambda v: f"{v:.2f}"),
-        "Note": ["null / constant model" if d else "" for d in perf["degenerate_constant"]],
+        "Note": [_note(r) for _, r in perf.iterrows()],
     })
-    st.dataframe(table, hide_index=True, width="stretch")
+    # Model + Note carry the ensemble's identity and its role; at default width both truncate.
+    st.dataframe(table, hide_index=True, width="stretch", column_config={
+        "Model": st.column_config.TextColumn("Model", width="large"),
+        "Note": st.column_config.TextColumn("Note", width="large"),
+    })
+
+    ens = tm[tm["model"] == ens_raw].iloc[0]
+    ui.note(
+        f"<b>The ensemble is the model.</b> It is the unweighted <b>{ens_how}</b> of the "
+        f"predictions of <b>{', '.join(ens_members)}</b> — the best three "
+        "<i>non-degenerate</i> models by cross-validated Spearman. Its prediction is the "
+        "<code>pred_ensemble</code> / <code>rank_ensemble</code> column of "
+        "<code>predictions_all.csv</code>, so it is what produces the <b>final long/short "
+        "ranking</b>, and it is the model frozen on train+val and walked forward through the "
+        "<b>backtest</b>. Held-out test: Spearman "
+        f"<b>{ens['test_spearman_pooled']:+.3f}</b> pooled, "
+        f"<b>{ens['test_spearman_perperiod_mean']:+.3f}</b> per-period, RMSE "
+        f"<b>{ens['test_rmse']:.2f}</b> — indistinguishable from zero, like every individual "
+        "model. Combining them does not rescue the null; it averages three near-noise "
+        "predictors.")
     ui.note("Lasso and ElasticNet drive <b>every</b> coefficient to exactly zero — they ARE "
             "the mean predictor. Their CV Spearman is an artifact of a constant prediction, "
             "not learned signal, so they are excluded from the ensemble and from the "
-            "&ldquo;best model&rdquo; tile above.")
+            "&ldquo;best model&rdquo; tile above. The ensemble itself has no CV score: it is "
+            "an average of already-CV-tuned models, scored once on the untouched test set.")
 
     cvp = cv.sort_values("cv_spearman_mean").copy()
     cvp["cv_spearman_mean_lo"] = cvp["cv_spearman_mean"] - cvp["cv_spearman_std"]
@@ -372,6 +429,12 @@ def _tab_classification(mode) -> None:
             "matching the long/short framing. <b>Leak control:</b> tercile cutoffs are fit on "
             "<b>train rows only</b> — per CV fold from that fold's train rows, and from "
             "train+val for the one-shot test. Test outcomes never inform a cutoff.")
+    ui.note("<b>No ensemble row here, deliberately.</b> This is a separate cross-check that "
+            "re-frames the task as classification with four standalone classifiers; there is "
+            "no classification counterpart of the regression ensemble, so <b>no ensemble AUC "
+            "exists</b> and none is shown. The regression ensemble — the model that actually "
+            "produces the ranking — is reported under <b>Performance</b>. Both framings reach "
+            "the same verdict: chance.")
 
     scheme_lbl = st.segmented_control(
         "Labelling scheme", ["Train-fitted tercile", "Balanced within-period"],
