@@ -83,15 +83,44 @@ class Stage:
 # thread, exactly to avoid concurrent writers. See FINDINGS.md #3.
 OPERATIVE_CONCURRENCY = 16
 
+# The international 20-F operative pass only considers filings from this fiscal year onward —
+# the value CLAUDE.md records for the original build (`--since-year 2020`).
+OPERATIVE_INTL_SINCE_YEAR = 2020
+
+
+def _no_key() -> bool:
+    """True (and warns) when the LLM key is absent, so the caller can skip gracefully."""
+    if os.environ.get(operative.ENV_KEY_NAME):
+        return False
+    log.warning("LITELLM_API_KEY not set -> skipping operative scoring. Cached scores are "
+                "retained; any new filing stays operative_missing (falls back to "
+                "financial_score), exactly as GEV is handled.")
+    return True
+
 
 def _operative_stage() -> None:
-    """Score NEW filings via the LLM, reusing the accession cache. Key-guarded."""
-    if not os.environ.get(operative.ENV_KEY_NAME):
-        log.warning("LITELLM_API_KEY not set -> skipping operative scoring. Cached scores are "
-                    "retained; any new filing stays operative_missing (falls back to "
-                    "financial_score), exactly as GEV is handled.")
+    """Score NEW US 10-K/10-Q filings via the LLM, reusing the accession cache. Key-guarded."""
+    if _no_key():
         return
     operative.run_full(concurrency=OPERATIVE_CONCURRENCY)
+
+
+def _operative_intl_stage() -> None:
+    """Score NEW international 20-F filings via the LLM. Key-guarded, cache-reusing.
+
+    A SEPARATE stage, not folded into `operative`, because it is a distinct filing type and a
+    distinct cost centre: it can be skipped or resumed independently with `--from`/`--to`.
+
+    Without it a from-scratch build produces NO 20-F scores at all, and the 11 conventional
+    internationals fall back to `financial_score` — silently reproducing a poorer feature set
+    than the committed one. Their scores feed `features`' as-of 20-F join (match to the most
+    recent 20-F filed ON OR BEFORE the report release date), which is what yields the
+    `operative_match='asof_20f'` rows. See FINDINGS.md #2.
+    """
+    if _no_key():
+        return
+    operative.run_intl(concurrency=OPERATIVE_CONCURRENCY,
+                       since_year=OPERATIVE_INTL_SINCE_YEAR)
 
 
 def _train_stage() -> None:
@@ -118,8 +147,10 @@ STAGES: list[Stage] = [
           lambda: features.main_kpis(do_write=True), network=False, writes_db=True),
     Stage("scores", "sector-percentile sub-scores -> scores",
           lambda: features.main_scores(do_write=True), network=False, writes_db=True),
-    Stage("operative", "LLM competitive-advantage score -> operative_scores (new filings only)",
+    Stage("operative", "LLM competitive-advantage score, US 10-K/10-Q -> operative_scores",
           _operative_stage, network=True, writes_db=True),
+    Stage("operative_intl", "LLM competitive-advantage score, international 20-F -> operative_scores",
+          _operative_intl_stage, network=True, writes_db=True),
     Stage("modelling", "join features + target -> modelling_data",
           lambda: features.main_modelling(["--write", "--floor=6"]), network=False, writes_db=True),
     Stage("eda", "feature diagnostics -> eda/",
