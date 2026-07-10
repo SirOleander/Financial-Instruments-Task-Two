@@ -377,9 +377,22 @@ def kpis_create_table() -> None:
         con.commit()
 
 
-def _kpis_counts(con) -> dict:
+def _counts_of_existing(con, tables) -> dict:
+    """Row counts for the protected tables that EXIST.
+
+    These before/after guards assert a stage did not disturb tables it must not touch. On a
+    FIRST BUILD, tables created by LATER stages (target_63d, scores, operative_scores) do not
+    exist yet, and `SELECT COUNT(*)` on them raises `sqlite3.OperationalError: no such table`.
+    A table that does not exist cannot have been corrupted, so it is skipped. On a populated
+    database every protected table exists and the guard is exactly as strict as before.
+    """
+    have = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     return {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-            for t in ("financial_facts", "daily_prices", "target_63d")}
+            for t in tables if t in have}
+
+
+def _kpis_counts(con) -> dict:
+    return _counts_of_existing(con, ("financial_facts", "daily_prices", "target_63d"))
 
 
 def kpis_write(rows: list[dict]) -> None:
@@ -723,8 +736,7 @@ def scores_create_table() -> None:
 
 
 def _scores_counts(con) -> dict:
-    return {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-            for t in ("financial_facts", "daily_prices", "target_63d", "kpi_values")}
+    return _counts_of_existing(con, ("financial_facts", "daily_prices", "target_63d", "kpi_values"))
 
 
 def scores_write(score_rows: list[dict]) -> None:
@@ -1428,7 +1440,7 @@ PROTECTED = ("financial_facts", "daily_prices", "target_63d", "kpi_values",
 
 
 def _table_counts(con) -> dict:
-    return {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in PROTECTED}
+    return _counts_of_existing(con, PROTECTED)
 
 
 def set_train_eligible(rows: list[dict], floor: int) -> set:

@@ -545,8 +545,17 @@ def upsert(results: list[dict]) -> None:
 
 
 def _counts(con) -> dict:
+    """Row counts for the protected tables that EXIST.
+
+    On a FIRST BUILD `target_63d` is created by a LATER stage, so `SELECT COUNT(*)` raised
+    `sqlite3.OperationalError: no such table`. A table that does not exist cannot have been
+    corrupted, so it is skipped. On a populated database every table exists and the guard is
+    exactly as strict as before.
+    """
+    have = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     return {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-            for t in ("financial_facts", "daily_prices", "target_63d", "kpi_values", "scores")}
+            for t in ("financial_facts", "daily_prices", "target_63d", "kpi_values", "scores")
+            if t in have}
 
 
 # --------------------------------------------------------------------------- #
