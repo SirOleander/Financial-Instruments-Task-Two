@@ -180,11 +180,17 @@ def main(argv: list[str] | None = None) -> int:
           f"{', '.join(s.name for s in plan)}")
     print("=" * 78)
 
+    # FROM-SCRATCH GUARD: on a first build there is no database to snapshot, and
+    # `shutil.copy2` on a nonexistent file raises FileNotFoundError before any stage runs.
+    # Only back up / fingerprint when a database already exists.
     snapshot_before = None
-    if writes:
+    if writes and DB_PATH.exists():
         shutil.copy2(DB_PATH, BACKUP_PATH)
         snapshot_before = _db_table_fingerprint()
         print(f"backup -> {BACKUP_PATH.name} ; DB content fingerprinted ({len(snapshot_before)} tables)\n")
+    elif writes:
+        print(f"no existing database at {DB_PATH.name} -> FROM-SCRATCH build; "
+              "no snapshot to take, skip-if-unchanged disabled for this run.\n")
 
     t0 = time.time()
     for i, s in enumerate(plan, 1):
@@ -193,8 +199,10 @@ def main(argv: list[str] | None = None) -> int:
         s.run()
         print(f"            done in {time.time() - st:.1f}s\n")
 
-    # skip-if-unchanged: restore the byte-identical snapshot when content did not move
-    if writes and not args.force:
+    # skip-if-unchanged: restore the byte-identical snapshot when content did not move.
+    # Skipped entirely on a from-scratch build (snapshot_before is None): there is no prior
+    # state to compare against or restore to, and `None.get(...)` would raise AttributeError.
+    if writes and not args.force and snapshot_before is not None:
         after = _db_table_fingerprint()
         changed = [t for t in after if snapshot_before.get(t) != after[t]]
         if changed:
