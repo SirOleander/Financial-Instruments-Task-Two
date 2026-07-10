@@ -194,11 +194,17 @@ def main(argv: list[str] | None = None) -> int:
           f"{', '.join(s.name for s in plan)}")
     print("=" * 78)
 
+    # Did a database exist BEFORE this run? This is the precise fact that governs both the
+    # snapshot (below) and the baseline-relative invariants (at the end). It must NOT be
+    # inferred from `snapshot_before is None`, which is also true for an artifact-only run
+    # (writes=False) against a perfectly good existing database.
+    db_existed = DB_PATH.exists()
+
     # FROM-SCRATCH GUARD: on a first build there is no database to snapshot, and
     # `shutil.copy2` on a nonexistent file raises FileNotFoundError before any stage runs.
     # Only back up / fingerprint when a database already exists.
     snapshot_before = None
-    if writes and DB_PATH.exists():
+    if writes and db_existed:
         shutil.copy2(DB_PATH, BACKUP_PATH)
         snapshot_before = _db_table_fingerprint()
         print(f"backup -> {BACKUP_PATH.name} ; DB content fingerprinted ({len(snapshot_before)} tables)\n")
@@ -227,9 +233,20 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\nPipeline finished in {time.time() - t0:.1f}s.")
 
+    # A FROM-SCRATCH build has no prior state of THIS database, so baseline-relative checks —
+    # notably `append-only: no deletions` — are meaningless against proofs/baseline.json, which
+    # fingerprints a DIFFERENT (committed) database. Comparing them produced a spurious FAIL and
+    # a non-zero exit code after a completely successful build. Run the STRUCTURAL invariants
+    # only in that case. Gated on `db_existed`, not on `snapshot_before`, so an artifact-only
+    # run against an existing database still gets the full check. See FINDINGS.md #8.
     base = _default_baseline()
-    rc = verify.main((["--baseline", str(base)] if base else []) + ["--db", str(DB_PATH)])
-    return rc
+    verify_args = ["--db", str(DB_PATH)]
+    if base is not None and db_existed:
+        verify_args = ["--baseline", str(base)] + verify_args
+    elif base is not None:
+        print("from-scratch build: skipping baseline-relative invariants "
+              "(no prior state of this database to compare against).\n")
+    return verify.main(verify_args)
 
 
 def _default_baseline() -> Path | None:
