@@ -338,18 +338,40 @@ def inv_null_result() -> Result:
     return Result("near-null result holds", not problems, "; ".join(problems or notes))
 
 
-def inv_no_deletions(con, baseline: dict | None) -> Result:
-    """Ingestion is APPEND-ONLY: raw-table row counts never shrink."""
-    if not baseline:
-        return Result("append-only: no deletions", True, "no baseline", skipped=True)
-    shrunk = []
+def inv_no_deletions(con, deletion_ref: dict | None, ref_label: str = "the reference") -> Result:
+    """Ingestion is APPEND-ONLY: raw-table row counts never shrink.
+
+    `deletion_ref` maps table -> row count in the state this check is measured AGAINST. The
+    pipeline passes the counts taken at the START OF THIS RUN, so the check answers the only
+    question it can honestly answer: "did this run delete anything?"
+
+    It must NOT be a recorded baseline of a DIFFERENT database. Doing that made a from-scratch
+    build compare itself to the committed `proofs/baseline.json` and report a spurious
+    `daily_prices: 156666 -> 150557` deletion after a completely successful build. A fresh
+    database has no predecessor, so with no reference the question is unanswerable and the
+    check is SKIPPED rather than failed.
+
+    (The standalone CLI still derives a reference from --baseline: for a stable repo, "has the
+    DB lost rows relative to the recorded baseline?" is a meaningful question. See main().)
+    """
+    if not deletion_ref:
+        return Result("append-only: no deletions", True,
+                      "no pre-run reference (from-scratch build)", skipped=True)
+    have = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    shrunk, checked = [], []
     for t in ("financial_facts", "daily_prices"):
-        before = baseline["tables"].get(t, {}).get("rows")
+        before = deletion_ref.get(t)
+        if before is None or t not in have:
+            continue
         after = con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-        if before is not None and after < before:
+        checked.append(t)
+        if after < before:
             shrunk.append(f"{t}: {before} -> {after}")
+    if not checked:
+        return Result("append-only: no deletions", True,
+                      "no comparable tables in the reference", skipped=True)
     return Result("append-only: no deletions", not shrunk,
-                  "; ".join(shrunk) or "financial_facts, daily_prices non-decreasing")
+                  "; ".join(shrunk) or f"{', '.join(checked)} non-decreasing vs {ref_label}")
 
 
 def inv_trainable_rows(con) -> Result:
@@ -375,7 +397,9 @@ def inv_trainable_rows(con) -> Result:
     return Result("trainable rows have target + prior", bad == 0 and tv + ts == len(te), detail)
 
 
-def run_invariants(db: Path, baseline: dict | None) -> list[Result]:
+def run_invariants(db: Path, deletion_ref: dict | None,
+                   ref_label: str = "the reference") -> list[Result]:
+    """`deletion_ref`: {table: row count} to compare the append-only check against."""
     with _connect(db) as con:
         return [
             inv_universe(con),
@@ -386,14 +410,17 @@ def run_invariants(db: Path, baseline: dict | None) -> list[Result]:
             inv_backtest_sign(),
             inv_null_result(),
             inv_trainable_rows(con),
-            inv_no_deletions(con, baseline),
+            inv_no_deletions(con, deletion_ref, ref_label),
         ]
 
 
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, deletion_ref: dict | None = None) -> int:
+    """`deletion_ref` ({table: row count}) is supplied programmatically by the pipeline, which
+    knows what the database looked like at the START of the run. It takes precedence over any
+    reference derived from --baseline. When neither is available the append-only check SKIPs."""
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--db", type=Path, default=DEFAULT_DB, help="database to inspect")
     ap.add_argument("--save-baseline", type=Path, help="write a fingerprint JSON and exit")
@@ -429,16 +456,22 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  IDENTICAL — {n[0]} tables, {n[1]} artifacts, all content hashes match.")
         print()
 
-    baseline = None
-    if args.baseline:
-        baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
-    elif args.check:
-        baseline = json.loads(args.check.read_text(encoding="utf-8"))
+    # A caller-supplied pre-run reference always wins. Otherwise the standalone CLI derives one
+    # from --baseline/--check: for a stable repo, "has the DB lost rows relative to the recorded
+    # baseline?" is a meaningful question. The PIPELINE never relies on this path — it passes its
+    # own start-of-run counts, so a from-scratch build is never compared to a foreign database.
+    ref_label = "this run's starting counts"
+    if deletion_ref is None:
+        base_path = args.baseline or args.check
+        if base_path:
+            b = json.loads(base_path.read_text(encoding="utf-8"))
+            deletion_ref = {t: v.get("rows") for t, v in b.get("tables", {}).items()}
+            ref_label = f"the recorded baseline ({base_path.name})"
 
     print("=" * 78)
     print("INVARIANTS")
     print("=" * 78)
-    for r in run_invariants(args.db, baseline):
+    for r in run_invariants(args.db, deletion_ref, ref_label):
         if r.skipped:
             tag = "SKIP"
         elif r.ok:

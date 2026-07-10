@@ -174,6 +174,13 @@ def _db_table_fingerprint() -> dict:
         return {t: verify.hash_table(con, t)["sha256"] for t in verify.table_names(con)}
 
 
+def _db_table_rows() -> dict:
+    """{table: row count} — the reference the append-only deletion check is measured against."""
+    with verify._connect(DB_PATH) as con:
+        return {t: con.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+                for t in verify.table_names(con)}
+
+
 def _select(from_stage: str | None, to_stage: str | None, offline: bool) -> list[Stage]:
     lo = STAGE_INDEX[from_stage] if from_stage else 0
     hi = STAGE_INDEX[to_stage] if to_stage else len(STAGES) - 1
@@ -232,6 +239,11 @@ def main(argv: list[str] | None = None) -> int:
     # (writes=False) against a perfectly good existing database.
     db_existed = DB_PATH.exists()
 
+    # Row counts as this run STARTS. This — not a recorded baseline of a different database —
+    # is the honest reference for the append-only "did this run delete anything?" check.
+    # None on a from-scratch build, where the question has no answer. See FINDINGS.md #8.
+    rows_before = _db_table_rows() if db_existed else None
+
     # FROM-SCRATCH GUARD: on a first build there is no database to snapshot, and
     # `shutil.copy2` on a nonexistent file raises FileNotFoundError before any stage runs.
     # Only back up / fingerprint when a database already exists.
@@ -287,20 +299,12 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\nPipeline finished in {time.time() - t0:.1f}s.")
 
-    # A FROM-SCRATCH build has no prior state of THIS database, so baseline-relative checks —
-    # notably `append-only: no deletions` — are meaningless against proofs/baseline.json, which
-    # fingerprints a DIFFERENT (committed) database. Comparing them produced a spurious FAIL and
-    # a non-zero exit code after a completely successful build. Run the STRUCTURAL invariants
-    # only in that case. Gated on `db_existed`, not on `snapshot_before`, so an artifact-only
-    # run against an existing database still gets the full check. See FINDINGS.md #8.
-    base = _default_baseline()
-    verify_args = ["--db", str(DB_PATH)]
-    if base is not None and db_existed:
-        verify_args = ["--baseline", str(base)] + verify_args
-    elif base is not None:
-        print("from-scratch build: skipping baseline-relative invariants "
-              "(no prior state of this database to compare against).\n")
-    return verify.main(verify_args)
+    # The append-only deletion check is measured against THIS RUN's starting row counts, never
+    # against proofs/baseline.json (a fingerprint of a DIFFERENT database). That both makes the
+    # check meaningful — it now detects a deletion caused by this run — and stops a from-scratch
+    # build from reporting a spurious `daily_prices: 156666 -> 150557` deletion. With no prior
+    # state (`rows_before is None`) the question is unanswerable and verify SKIPs it.
+    return verify.main(["--db", str(DB_PATH)], deletion_ref=rows_before)
 
 
 def _default_baseline() -> Path | None:
