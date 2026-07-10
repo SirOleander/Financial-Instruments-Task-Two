@@ -465,7 +465,7 @@ def main_yf_facts(write: bool = False) -> None:
     db.migrate_schema()
     print(f"Upserting {len(all_rows)} yfinance rows ...")
     db.insert_financial_facts(all_rows)
-    print("Done. Run the Step-3 verification script next.")
+    print(f"Done. Upserted {len(all_rows)} yfinance rows into financial_facts.")
 
 
 
