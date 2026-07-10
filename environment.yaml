@@ -1,16 +1,38 @@
-name: finmentsOLE
+# Conda alternative to `pip install -r requirements.txt`.
+#
+#   conda env create -f environment.yaml
+#   conda activate finments
+#
+# Kept in sync with requirements.txt: every DIRECT third-party import of src/fi/, dashboard/
+# and tools/ appears below. (Previously this file was missing pandas, numpy, matplotlib,
+# scipy, scikit-learn, xgboost, altair and pillow, and listed plotly + lxml, which the
+# project does not import.)
+name: finments
 channels:
-  - defaults
   - conda-forge
+  - defaults
 dependencies:
   - python=3.11
-  - ipykernel
-  - requests
-  - openpyxl
   - pip
+
+  # core data / numerics
+  - pandas>=2.2
+  - numpy>=1.26
+  - scipy>=1.11
+  - scikit-learn>=1.4
+  - matplotlib>=3.8
+
+  # ingest
+  - requests>=2.31
+  - beautifulsoup4>=4.12       # parsing uses the stdlib html.parser (lxml NOT needed)
+  - openpyxl>=3.1              # pandas ExcelWriter engine for tools/viewdatabase.py
+
+  # optional, for notebooks
+  - ipykernel
+
   - pip:
-    - plotly
-    - streamlit
-    - beautifulsoup4 
-    - lxml
-    - yfinance
+      - xgboost>=2.0
+      - yfinance>=0.2
+      - streamlit>=1.40
+      - altair>=5.0            # required explicitly: streamlit no longer declares it
+      - pillow>=10.0           # direct import in dashboard/data.py

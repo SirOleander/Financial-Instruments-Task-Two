@@ -1,18 +1,28 @@
-# Python 3.11. Dependencies derived from the actual imports across src/ and tools/.
+# Python 3.11. Dependencies derived from the ACTUAL imports across src/fi/, dashboard/ and tools/.
 # Versions are the tested set; loosen/pin as needed.
-pandas>=2.2          # DataFrames throughout (extraction, prices, KPIs, export)
-requests>=2.31       # SEC EDGAR + LiteLLM HTTP calls (C_client, D_pipeline, G_operative)
-beautifulsoup4>=4.12 # SEC iXBRL/HTML filing parsing via html.parser (C_client, G_operative)
-yfinance>=0.2        # non-US fundamentals + daily prices (yf_ingest, price_ingest, tools/)
-openpyxl>=3.1        # Excel export engine for tools/viewdatabase.py
-numpy>=1.26          # direct import in H_modelling.py / I_eda.py (feature assembly, VIF, winsor)
-matplotlib>=3.8      # EDA figures written to eda/ (I_eda.py)
-scipy>=1.11          # spearmanr for rank-based model scoring (J_models.py); modelling stats
-scikit-learn>=1.4    # regression roster, Pipeline, TimeSeriesSplit, GridSearchCV (J_models.py)
-xgboost>=2.0         # gradient-boosted regressor in the roster (J_models.py)
-streamlit>=1.40      # read-only research dashboard (dashboard/app.py)
+#
+#   pip install -r requirements.txt
+#
+pandas>=2.2          # DataFrames throughout (ingest, prices, KPIs, modelling, dashboard)
+numpy>=1.26          # direct import in fi.features / fi.modelling (assembly, VIF, winsorization)
+requests>=2.31       # SEC EDGAR + LiteLLM HTTP calls (fi.sec, fi.operative)
+beautifulsoup4>=4.12 # SEC iXBRL/HTML filing parsing via the stdlib html.parser (fi.sec, fi.operative)
+yfinance>=0.2        # non-US fundamentals + daily prices (fi.market, tools/, dashboard/fetch_ohlc.py)
+matplotlib>=3.8      # figures written to eda/, predictions/, analysis/ (fi.modelling)
+scipy>=1.11          # spearmanr for rank-based model scoring (fi.modelling)
+scikit-learn>=1.4    # model roster, Pipeline, TimeSeriesSplit, GridSearchCV (fi.modelling)
+xgboost>=2.0         # gradient-boosted regressor/classifier in the roster (fi.modelling)
+openpyxl>=3.1        # pandas ExcelWriter ENGINE for tools/viewdatabase.py (no direct import)
 
-# NOT required (verified against real imports): openai (the operative LLM is called via
-# `requests`, not the OpenAI SDK), lxml (BeautifulSoup uses the stdlib html.parser).
-# numpy was previously transitive via pandas; it is now a DIRECT import (modelling/EDA),
-# hence pinned above. A conda environment.yaml also exists.
+# --- dashboard (read-only Streamlit app) ---
+streamlit>=1.40      # the app itself (dashboard/app.py, data.py, ui.py)
+altair>=5.0          # every chart in dashboard/charts.py. REQUIRED EXPLICITLY: Streamlit no
+                     # longer declares altair as a dependency, so omitting it makes a fresh
+                     # `pip install -r requirements.txt` fail with ImportError on charts.py.
+pillow>=10.0         # logo trim/normalisation in dashboard/data.py (`import PIL`). Currently
+                     # also a transitive dep of streamlit, but it is a DIRECT import here, so
+                     # it is pinned rather than relied upon transitively.
+
+# NOT required (verified against the real imports): openai (the operative LLM is called via
+# `requests`, not the OpenAI SDK) and lxml (BeautifulSoup uses the stdlib html.parser).
+# A conda environment.yaml is also provided as an alternative to pip.
