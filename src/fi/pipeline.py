@@ -97,14 +97,19 @@ STAGES: list[Stage] = [
           lambda: market.main_yf_facts(write=True), network=True, writes_db=True),
     Stage("prices", "yfinance daily adjusted close -> daily_prices",
           lambda: market.main_prices(write=True), network=True, writes_db=True),
+    # `target` runs HERE, directly after `prices`, and before kpis/scores/operative. It depends
+    # only on daily_prices + financial_facts (verified: it reads none of the later tables), and
+    # this restores the dependency order the pre-refactor README documented (price_target.py ran
+    # before E_kpis.py). Several stages' before/after guards COUNT target_63d, so creating it
+    # early removes an entire class of from-scratch failure at the source. See FINDINGS.md #5.
+    Stage("target", "forward 63-day excess Sharpe -> target_63d",
+          lambda: features.main_target(write=True), network=False, writes_db=True),
     Stage("kpis", "raw KPIs -> kpi_values",
           lambda: features.main_kpis(do_write=True), network=False, writes_db=True),
     Stage("scores", "sector-percentile sub-scores -> scores",
           lambda: features.main_scores(do_write=True), network=False, writes_db=True),
     Stage("operative", "LLM competitive-advantage score -> operative_scores (new filings only)",
           _operative_stage, network=True, writes_db=True),
-    Stage("target", "forward 63-day excess Sharpe -> target_63d",
-          lambda: features.main_target(write=True), network=False, writes_db=True),
     Stage("modelling", "join features + target -> modelling_data",
           lambda: features.main_modelling(["--write", "--floor=6"]), network=False, writes_db=True),
     Stage("eda", "feature diagnostics -> eda/",
