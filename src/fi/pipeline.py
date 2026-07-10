@@ -74,6 +74,15 @@ class Stage:
     writes_db: bool        # mutates a financials.db table (governs the skip-if-unchanged snapshot)
 
 
+# `operative.run_full()` defaults to concurrency=1. On a from-scratch build that is ~1,531
+# SEQUENTIAL (SEC document fetch + LLM call) round-trips — MEASURED at ~114 s/filing during the
+# dry run, i.e. ~48 HOURS. CLAUDE.md records that the original build used `--concurrency 16`;
+# at 16 the same work took ~3 h (a ~16x speedup, also measured). Raising this is safe by
+# construction: run_full's workers do NETWORK ONLY — every SQLite write happens on the main
+# thread, exactly to avoid concurrent writers. See FINDINGS.md #3.
+OPERATIVE_CONCURRENCY = 16
+
+
 def _operative_stage() -> None:
     """Score NEW filings via the LLM, reusing the accession cache. Key-guarded."""
     if not os.environ.get(operative.ENV_KEY_NAME):
@@ -81,7 +90,7 @@ def _operative_stage() -> None:
                     "retained; any new filing stays operative_missing (falls back to "
                     "financial_score), exactly as GEV is handled.")
         return
-    operative.run_full()
+    operative.run_full(concurrency=OPERATIVE_CONCURRENCY)
 
 
 def _train_stage() -> None:
